@@ -1,0 +1,6 @@
+{
+  "name": "Nestlist",
+  "description": "A Kenyan rental SaaS platform connecting landlords and tenants, with M-Pesa integration and SMS alerts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
