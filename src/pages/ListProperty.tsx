@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { PhotoUpload } from "../components/PhotoUpload";
@@ -1160,6 +1160,15 @@ export const ListProperty: React.FC = () => {
                       </>
                     )}
                   </button>
+
+                  {/* COMPONENT 2 — Terms Footer Banner */}
+                  <p className="text-[11px] text-stone-500 leading-normal text-center select-none">
+                    By submitting this payment you confirm you have read and agree to NestList's{" "}
+                    <Link to="/terms" target="_blank" className="text-[#1E6B4A] hover:underline font-bold">
+                      Terms of Service
+                    </Link>{" "}
+                    and that the M-Pesa code is genuine.
+                  </p>
 
                   {/* Reassurance Message Banner */}
                   <div className="bg-[#F0FDF4] rounded-[10px] p-3 text-[13px] text-[#065F46] leading-normal flex items-start gap-1.5 select-none">

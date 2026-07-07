@@ -16,6 +16,7 @@ import { LandlordDashboard } from "./pages/LandlordDashboard";
 import { ListProperty } from "./pages/ListProperty";
 import { AdminPanel } from "./pages/Admin";
 import { Privacy } from "./pages/Privacy";
+import { Terms } from "./pages/Terms";
 import { Profile } from "./pages/Profile";
 import AuthCallback from "./pages/AuthCallback";
 import { DevConnectionBanner } from "./components/DevConnectionBanner";
@@ -145,6 +146,14 @@ export default function App() {
                 }
               />
 
+              {/* Publicly Accessible Terms of Service */}
+              <Route
+                path="/terms"
+                element={
+                  <Terms />
+                }
+              />
+
               {/* Wildcard Fallback redirects unauthenticated/invalid routes to login */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
@@ -160,7 +169,7 @@ export default function App() {
               <div className="flex justify-center space-x-4 text-white/60 text-[11px] font-medium pt-1">
                 <Link to="/privacy" className="text-[#34D399] hover:text-white hover:underline transition">Privacy Policy</Link>
                 <span>·</span>
-                <span className="text-[#34D399] hover:text-white cursor-pointer hover:underline transition">Terms of Service</span>
+                <Link to="/terms" className="text-[#34D399] hover:text-white hover:underline transition">Terms of Service</Link>
                 <span>·</span>
                 <span className="text-[#34D399] hover:text-[#34D399] select-all">Support: support@nestlist.com</span>
               </div>

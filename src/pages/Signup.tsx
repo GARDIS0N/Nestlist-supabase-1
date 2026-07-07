@@ -36,7 +36,9 @@ export const Signup: React.FC = () => {
     email.trim() !== "" &&
     password.length >= 8;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) {
       if (password.length < 8) {
@@ -46,7 +48,11 @@ export const Signup: React.FC = () => {
       }
       return;
     }
+    setShowTermsModal(true);
+  };
 
+  const handleActualSignup = async () => {
+    setShowTermsModal(false);
     setLoading(true);
     setError(null);
 
@@ -452,15 +458,76 @@ export const Signup: React.FC = () => {
 
         <div style={{ marginTop: "24px", textAlign: "center", fontSize: "12px", color: "#4B5E54", lineHeight: "1.5" }}>
           By creating an account you agree to our{" "}
-          <Link to="#" style={{ color: "#4B5E54", fontWeight: "600", textDecoration: "underline" }}>
+          <Link to="/terms" target="_blank" style={{ color: "#1E6B4A", fontWeight: "750", textDecoration: "underline" }}>
             Terms of Service
           </Link>{" "}
           and{" "}
-          <Link to="/privacy" style={{ color: "#1E6B4A", fontWeight: "750", textDecoration: "underline" }}>
+          <Link to="/privacy" target="_blank" style={{ color: "#1E6B4A", fontWeight: "750", textDecoration: "underline" }}>
             Privacy Policy
           </Link>.
         </div>
       </div>
+
+      {/* COMPONENT 1 — Accept Terms Modal */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-[#E2EAE6] p-6 max-w-md w-full shadow-xl text-left animate-fade-in">
+            <h3 className="font-serif text-xl font-bold text-[#0F1A14] mb-4 flex items-center gap-2">
+              ⚖️ Before you continue
+            </h3>
+            
+            <p className="text-sm text-stone-600 mb-4 leading-relaxed">
+              Please review and confirm these important points from NestList's Terms of Service:
+            </p>
+
+            <ul className="space-y-3 mb-6 text-sm text-[#0F1A14]">
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-600 shrink-0 mt-0.5">✅</span>
+                <span>NestList listing fees are strictly <strong>non-refundable</strong>.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-600 shrink-0 mt-0.5">✅</span>
+                <span>Submit only genuine M-Pesa confirmation codes from Safaricom. Fraudulent code submission leads to suspension.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-600 shrink-0 mt-0.5">✅</span>
+                <span>List only physical properties you own or have formal written authority to represent.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-600 shrink-0 mt-0.5">✅</span>
+                <span>Tenants browse for free — we charge zero registration or viewing fees to tenants.</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-emerald-600 shrink-0 mt-0.5">✅</span>
+                <span>All operations and disputes are governed by the <strong>Laws of Kenya</strong>.</span>
+              </li>
+            </ul>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link
+                to="/terms"
+                target="_blank"
+                className="flex-1 text-center py-2.5 px-4 border border-[#E2EAE6] text-stone-600 hover:text-[#0A4D2E] hover:bg-stone-50 rounded-xl text-xs font-semibold transition"
+              >
+                Read Full Terms
+              </Link>
+              <button
+                onClick={handleActualSignup}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-[#1E6B4A] to-[#2D9E6B] text-white hover:brightness-95 rounded-xl text-xs font-semibold shadow-md transition"
+              >
+                I Agree — Create Account
+              </button>
+            </div>
+            
+            <button
+              onClick={() => setShowTermsModal(false)}
+              className="mt-4 w-full text-center text-[11px] text-stone-400 hover:text-stone-600 transition"
+            >
+              Cancel registration
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
