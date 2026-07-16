@@ -28,7 +28,7 @@ export const Terms: React.FC = () => {
       canonical.setAttribute("rel", "canonical");
       document.head.appendChild(canonical);
     }
-    canonical.setAttribute("href", "https://nestlist-supabase.vercel.app/terms");
+    canonical.setAttribute("href", "https://nestlist.com/terms");
 
     // 4. Scroll listener for "Back to Top" button
     const handleScroll = () => {
@@ -141,8 +141,8 @@ export const Terms: React.FC = () => {
             <div className="text-[15px] text-gray-700 leading-[1.85] space-y-4 font-normal">
               <p>
                 Welcome to NestList. By accessing or using our platform at{" "}
-                <a href="https://nestlist-supabase.vercel.app" target="_blank" rel="noopener noreferrer" className="text-[#1E6B4A] underline font-medium">
-                  nestlist-supabase.vercel.app
+                <a href="https://nestlist.com" target="_blank" rel="noopener noreferrer" className="text-[#1E6B4A] underline font-medium">
+                  nestlist.com
                 </a>{" "}
                 or any associated services, you agree to be bound by these Terms of Service. These terms form a legally binding contract between you and <strong>Nestlist Rental Platforms Limited</strong> (Business Registration: BN-P7SEPZD3).
               </p>
@@ -187,7 +187,7 @@ export const Terms: React.FC = () => {
               </p>
               <ul className="space-y-3 pl-4 border-l-2 border-emerald-100">
                 <li>
-                  <strong>"NestList" or "Platform":</strong> The website and digital portal accessible at <em>nestlist-supabase.vercel.app</em> and any related software application managed by Nestlist Rental Platforms Limited.
+                  <strong>"NestList" or "Platform":</strong> The website and digital portal accessible at <em>nestlist.com</em> and any related software application managed by Nestlist Rental Platforms Limited.
                 </li>
                 <li>
                   <strong>"We", "Us", "Our":</strong> Nestlist Rental Platforms Limited, a registered business in Kenya (Registration Number: BN-P7SEPZD3).
@@ -301,7 +301,7 @@ export const Terms: React.FC = () => {
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">4.3 Account Security</h4>
               <p>
-                You are fully responsible for all actions, uploads, listings, payments, and messages sent under your account. If you believe your account has been compromised, you must immediately contact NestList support at <strong>gardisonkirui11@gmail.com</strong> or call <strong>+254715185037</strong>.
+                You are fully responsible for all actions, uploads, listings, payments, and messages sent under your account. If you believe your account has been compromised, you must immediately contact NestList support at <strong>support@nestlist.com</strong> or call <strong>+254715185037</strong>.
               </p>
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">4.4 One Account Per Person</h4>
@@ -442,7 +442,7 @@ export const Terms: React.FC = () => {
                 <li>A confirmed, proven system error on NestList's server side.</li>
               </ul>
               <p>
-                To lodge a refund query under these exceptions, please contact our financial desk at <strong>gardisonkirui11@gmail.com</strong> with your transaction receipt.
+                To lodge a refund query under these exceptions, please contact our financial desk at <strong>support@nestlist.com</strong> with your transaction receipt.
               </p>
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">5.6 Listing Renewal</h4>
@@ -474,21 +474,25 @@ export const Terms: React.FC = () => {
               </p>
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-4 mb-2">6.1 How M-Pesa Payments Work</h4>
-              <p>To process your listing payment, follow these simple steps:</p>
-              <ol className="list-decimal pl-6 space-y-1 text-gray-600 text-sm">
-                <li>Open your Sim ToolKit or Safaricom M-Pesa App.</li>
-                <li>Select <strong>Lipa Na M-Pesa</strong>, then choose <strong>Paybill</strong>.</li>
-                <li>Enter Business Number: <strong>247247</strong>.</li>
-                <li>Enter Account Number: <strong>0715185037</strong>.</li>
-                <li>Enter the exact amount corresponding to your property type (e.g., KES 500 for a 1 Bedroom).</li>
-                <li>Input your private M-Pesa PIN and press Send/Confirm.</li>
-                <li>Wait for Safaricom to deliver the confirmation SMS.</li>
-                <li>Copy the unique 10-character code from the SMS and submit it on the NestList payment page.</li>
-              </ol>
+              <p>NestList supports two convenient ways to pay for your property listing activation:</p>
+              <div className="space-y-4 pl-4 border-l-2 border-[#1E6B4A] text-sm text-gray-700 mt-3">
+                <div>
+                  <p className="font-bold text-[#1E6B4A]">Option A: Instant M-Pesa STK Push (Recommended)</p>
+                  <p className="text-xs text-gray-600 leading-relaxed mt-1">
+                    Select "M-Pesa STK Push", verify your transacting phone number, and click "Initiate Payment". Safaricom will send an instant pop-up window directly to your mobile screen. Simply enter your private M-Pesa PIN and tap OK. Safaricom will securely update our platform, and your listing will be verified and go live instantly!
+                  </p>
+                </div>
+                <div>
+                  <p className="font-bold text-[#1E6B4A]">Option B: Manual Paybill (Backup)</p>
+                  <p className="text-xs text-gray-600 leading-relaxed mt-1">
+                    Alternatively, open your SIM Toolkit or M-Pesa app, go to Lipa Na M-Pesa, choose Paybill, enter Business No <strong>247247</strong>, Account No <strong>0715185037</strong>, and the correct amount. Copy the 10-character code from the Safaricom confirmation SMS and enter it on our manual verification tab. Our admin desk will review and activate your listing shortly.
+                  </p>
+                </div>
+              </div>
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">6.2 Confirmation Code Requirements</h4>
               <p>
-                M-Pesa transaction codes (e.g., QBG582Y78X) must be submitted exactly as received. Codes are case-sensitive and must be written in capital letters. Each unique M-Pesa code can only be submitted once. System tracking prevents multiple claims on a single transaction.
+                For manual submissions, the 10-character transaction code (e.g., QBG582Y78X) must be submitted exactly as received. Codes are case-sensitive and must be written in capital letters. Each unique M-Pesa code can only be submitted once. System tracking prevents multiple claims on a single transaction.
               </p>
 
               {/* Danger box */}
@@ -504,12 +508,12 @@ export const Terms: React.FC = () => {
                 <span className="font-bold flex items-center gap-1.5 mb-1 text-red-950">
                   <Shield className="h-4 w-4 text-[#DC2626]" /> Safety Warning: Never Disclose Your M-Pesa PIN
                 </span>
-                NestList will <strong>NEVER</strong> ask you for your M-Pesa PIN, bank password, or OTP code under any circumstances. If anyone claiming to represent NestList contacts you asking for your PIN or credentials, hang up immediately. Report such incidents to Safaricom support at <strong>100</strong> or contact us directly.
+                NestList will <strong>NEVER</strong> ask you for your M-Pesa PIN, bank password, or OTP code under any circumstances. All PIN entries for STK Push happen on Safaricom's official secure SIM-overlay screen. If anyone claiming to represent NestList contacts you asking for your PIN, hang up and report them.
               </div>
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">6.5 Payment Disputes</h4>
               <p>
-                If your M-Pesa code was rejected or if you encountered issues during payment, please lodge a payment dispute within <strong>7 days</strong> by email to <strong>gardisonkirui11@gmail.com</strong>. Include:
+                If your M-Pesa code was rejected or if you encountered issues during payment, please lodge a payment dispute within <strong>7 days</strong> by email to <strong>support@nestlist.com</strong>. Include:
               </p>
               <ul className="list-disc pl-6 space-y-1 text-gray-600 text-sm">
                 <li>Your mobile number used to send the payment.</li>
@@ -674,7 +678,7 @@ export const Terms: React.FC = () => {
                 <span className="font-bold flex items-center gap-1.5 mb-1 text-emerald-950">
                   <ShieldCheck className="h-4 w-4 text-[#1E6B4A]" /> zero-Fee Protection for Tenants
                 </span>
-                <strong>NestList is 100% free for tenants.</strong> We do not charge registration fees, viewing commission taxes, or rent-finder penalties to tenants. If anyone claiming to represent NestList demands money to take you for a viewing or secure a house, do not pay them. Report their details immediately to <strong>gardisonkirui11@gmail.com</strong>.
+                <strong>NestList is 100% free for tenants.</strong> We do not charge registration fees, viewing commission taxes, or rent-finder penalties to tenants. If anyone claiming to represent NestList demands money to take you for a viewing or secure a house, do not pay them. Report their details immediately to <strong>support@nestlist.com</strong>.
               </div>
             </div>
           </section>
@@ -769,7 +773,7 @@ export const Terms: React.FC = () => {
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">11.3 Reporting Copyright Infringements</h4>
               <p>
-                If you believe any content or photos published on NestList infringe your personal copyright, please notify our team immediately at <strong>gardisonkirui11@gmail.com</strong> with specific listing links and proof of original copyright.
+                If you believe any content or photos published on NestList infringe your personal copyright, please notify our team immediately at <strong>info@nestlist.com</strong> with specific listing links and proof of original copyright.
               </p>
             </div>
           </section>
@@ -844,7 +848,7 @@ export const Terms: React.FC = () => {
                 If you have an issue, query, or conflict with NestList as a business, please follow this resolution path:
               </p>
               <p>
-                <strong>Step 1:</strong> Email us at <strong>gardisonkirui11@gmail.com</strong>. We commit to investigating and resolving all customer complaints within 7 business days.
+                <strong>Step 1:</strong> Email us at <strong>info@nestlist.com</strong>. We commit to investigating and resolving all customer complaints within 7 business days.
               </p>
               <p>
                 <strong>Step 2:</strong> If we fail to resolve the conflict within 30 days, any dispute arising from these terms will be governed by the laws of Kenya and will be subjected exclusively to the jurisdiction of the courts of Kenya.
@@ -852,7 +856,7 @@ export const Terms: React.FC = () => {
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">13.3 Payment and Listing Fee Claims</h4>
               <p>
-                All claims regarding transaction issues, M-Pesa failures, or manual verification queries must be logged within 7 days of the payment. Log payment claims with full receipt evidence at <strong>gardisonkirui11@gmail.com</strong>.
+                All claims regarding transaction issues, M-Pesa failures, or manual verification queries must be logged within 7 days of the payment. Log payment claims with full receipt evidence at <strong>support@nestlist.com</strong>.
               </p>
             </div>
           </section>
@@ -894,7 +898,7 @@ export const Terms: React.FC = () => {
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">14.3 Appeals Procedure</h4>
               <p>
-                If you believe your account was suspended in error, you can submit an appeal by emailing <strong>gardisonkirui11@gmail.com</strong>. State your registered email and attach transaction screenshots or property ownership documentation. Appeals are reviewed and answered within 5 business days.
+                If you believe your account was suspended in error, you can submit an appeal by emailing <strong>support@nestlist.com</strong>. State your registered email and attach transaction screenshots or property ownership documentation. Appeals are reviewed and answered within 5 business days.
               </p>
 
               <h4 className="text-base font-bold text-[#1E6B4A] mt-6 mb-2">14.4 Voluntary Deletion</h4>
@@ -985,7 +989,7 @@ export const Terms: React.FC = () => {
                 <p className="text-gray-600 text-sm">Nairobi, Kenya</p>
                 <p className="text-gray-600 text-sm flex items-center gap-1.5">
                   <Mail className="h-4 w-4 text-[#1E6B4A]" />
-                  <a href="mailto:gardisonkirui11@gmail.com" className="text-[#1E6B4A] hover:underline font-medium">gardisonkirui11@gmail.com</a>
+                  <a href="mailto:info@nestlist.com" className="text-[#1E6B4A] hover:underline font-medium">info@nestlist.com</a>
                 </p>
                 <p className="text-gray-600 text-sm flex items-center gap-1.5">
                   <Phone className="h-4 w-4 text-[#1E6B4A]" />

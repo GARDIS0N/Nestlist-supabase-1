@@ -26,7 +26,7 @@ export const Privacy: React.FC = () => {
       canonical.setAttribute("rel", "canonical");
       document.head.appendChild(canonical);
     }
-    canonical.setAttribute("href", "https://nestlist-supabase.vercel.app/privacy");
+    canonical.setAttribute("href", "https://nestlist.com/privacy");
   }, []);
 
   const handleScrollToTop = () => {
@@ -66,9 +66,9 @@ export const Privacy: React.FC = () => {
             Nestlist Rental Platforms Limited
           </p>
           <div className="mt-4 flex flex-wrap justify-center items-center gap-x-4 gap-y-2 text-xs sm:text-sm text-emerald-100/80 font-mono">
-            <span>Effective: July 5, 2026</span>
+            <span>Effective: July 7, 2026</span>
             <span className="hidden sm:inline text-emerald-100/40">•</span>
-            <span>Last Updated: July 5, 2026</span>
+            <span>Last Updated: July 7, 2026</span>
           </div>
         </div>
       </div>
@@ -161,7 +161,7 @@ export const Privacy: React.FC = () => {
                   Karibu to NestList! NestList is Kenya's trusted digital property listing platform, operated by <strong>Nestlist Rental Platforms Limited</strong> (Business Registration: <strong>BN-P7SEPZD3</strong>). We connect landlords, property agents, caretakers, and property seekers (tenants) across Nairobi, Kiambu, Machakos, Nakuru, Kisumu, Mombasa, and beyond.
                 </p>
                 <p>
-                  Your privacy is incredibly important to us. This policy outlines exactly how we collect, handle, verify, store, and protect your personal information on our website (<a href="https://nestlist-supabase.vercel.app" target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline hover:text-emerald-800">https://nestlist-supabase.vercel.app</a>) and all related services. We have written this in straightforward, plain English so that landlords and tenants can understand exactly what happens to their information.
+                  Your privacy is incredibly important to us. This policy outlines exactly how we collect, handle, verify, store, and protect your personal information on our website (<a href="https://nestlist.com" target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline hover:text-emerald-800">https://nestlist.com</a>) and all related services. We have written this in straightforward, plain English so that landlords and tenants can understand exactly what happens to their information.
                 </p>
                 <p>
                   Under the <strong>Kenya Data Protection Act 2019</strong>, <strong>Nestlist Rental Platforms Limited</strong> acts as the Data Controller. We are fully committed to keeping your information safe and respecting your rights throughout your property journey.
@@ -213,10 +213,11 @@ export const Privacy: React.FC = () => {
                       <strong className="text-stone-950 block mb-1">Payment Information:</strong>
                       <div className="text-sm space-y-1.5 text-stone-700">
                         <p>• M-Pesa receipt verification code (e.g. QBG582Y78X).</p>
-                        <p>• Mobile number used to perform the transaction.</p>
+                        <p>• Mobile number used to perform the transaction (required for STK Push and manual auditing).</p>
                         <p>• Amount paid in KES for the listing activation fee.</p>
+                        <p>• M-Pesa Checkout Request ID for automated STK Push tracking.</p>
                         <p className="mt-2 text-xs text-[#92400E] font-medium bg-[#FEF3C7] p-2 rounded-lg border border-[#FDE68A]">
-                          ⚠️ NOTE: We do NOT store your M-Pesa PIN, nor do we have any access to your private M-Pesa balance. We only check the specific receipt code you share with us.
+                          ⚠️ NOTE: We do NOT store your M-Pesa PIN, nor do we have any access to your private M-Pesa balance. All PIN verification occurs securely on Safaricom's official prompt screen.
                         </p>
                       </div>
                     </li>
@@ -372,27 +373,36 @@ export const Privacy: React.FC = () => {
               </div>
               <div className="pl-5 border-l-4 border-emerald-700 space-y-4">
                 <p>
-                  As an authentic Kenyan platform, NestList accepts manual mobile payment verification.
+                  As a leading Kenyan property portal, NestList accepts payments through safe Safaricom M-Pesa channels: Instant STK Push prompts and Manual Paybill transfers.
                 </p>
 
                 <div className="bg-stone-50 rounded-xl p-5 border border-stone-200 space-y-3">
                   <h3 className="font-serif text-stone-950 font-normal">How Payments Work:</h3>
-                  <ol className="list-decimal pl-5 space-y-2 text-sm text-stone-700">
-                    <li>Landlord sends the appropriate listing fee via M-Pesa to our designated account number.</li>
-                    <li>Safaricom issues a confirmation SMS with a 10-character reference code (e.g., <strong>QBG582Y78X</strong>).</li>
-                    <li>The Landlord copies and submits this code on our listing creation portal.</li>
-                    <li>Our administrative team checks and approves the transaction internally. Once confirmed, the property immediately goes live.</li>
-                  </ol>
+                  <div className="space-y-4 text-sm text-stone-700">
+                    <div>
+                      <p className="font-bold text-stone-900">A. Instant M-Pesa STK Push (Recommended):</p>
+                      <p className="text-xs mt-1">
+                        You enter your M-Pesa phone number in the portal. We trigger a secure pop-up prompt directly on your Safaricom SIM card. Once you enter your PIN, Safaricom sends our servers an automated confirmation webhook. Your property goes live instantly without manual review.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-bold text-stone-900">B. Manual Lipa Na M-Pesa Paybill (Backup):</p>
+                      <p className="text-xs mt-1">
+                        You send the listing fee manually to Paybill 247247, Account 0715185037. Safaricom sends you a 10-character confirmation SMS. You copy and submit this reference code in our dashboard, and our administrative team manually verifies and activates the property.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="p-4 bg-emerald-50/40 rounded-xl border border-emerald-100">
                     <strong className="text-emerald-950 block text-xs uppercase tracking-wider mb-1">We Store:</strong>
                     <ul className="text-xs text-stone-700 space-y-1">
-                      <li>• Receipt reference code</li>
+                      <li>• Receipt reference code (e.g. MpesaReceiptNumber)</li>
                       <li>• Transacting phone number</li>
                       <li>• Total paid in KES</li>
                       <li>• Transaction date and time</li>
+                      <li>• Safaricom Checkout Request ID (for STK Push)</li>
                     </ul>
                   </div>
                   <div className="p-4 bg-rose-50/40 rounded-xl border border-rose-100">
@@ -411,7 +421,7 @@ export const Privacy: React.FC = () => {
                   <div className="flex gap-2">
                     <AlertTriangle className="h-5 w-5 text-emerald-800 shrink-0 mt-0.5" />
                     <p className="text-xs sm:text-sm font-medium">
-                      <strong>Scam Warning:</strong> NestList will never, under any circumstances, call or email you to request your M-Pesa PIN. If someone claiming to represent NestList asks for your PIN, please hang up immediately and report them to us at <a href="mailto:gardisonkirui11@gmail.com" className="underline font-bold">gardisonkirui11@gmail.com</a>.
+                      <strong>Scam Warning:</strong> NestList will never, under any circumstances, call or email you to request your M-Pesa PIN. If someone claiming to represent NestList asks for your PIN, please hang up immediately and report them to us at <a href="mailto:info@nestlist.com" className="underline font-bold">info@nestlist.com</a>.
                     </p>
                   </div>
                 </div>
@@ -504,7 +514,7 @@ export const Privacy: React.FC = () => {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 text-stone-950">
                   <p className="font-bold text-emerald-950 mb-1">How to exercise your rights:</p>
                   <p className="text-xs sm:text-sm text-stone-800 leading-relaxed">
-                    Simply write to us at <a href="mailto:gardisonkirui11@gmail.com" className="underline font-bold text-emerald-850">gardisonkirui11@gmail.com</a> or reach out on our support phone: <a href="tel:+254715185037" className="underline font-bold text-emerald-850">+254715185037</a>. We will verify your identity first to protect your account and respond to your request within <strong>14 days</strong>.
+                    Simply write to us at <a href="mailto:info@nestlist.com" className="underline font-bold text-emerald-850">info@nestlist.com</a> or reach out on our support phone: <a href="tel:+254715185037" className="underline font-bold text-emerald-850">+254715185037</a>. We will verify your identity first to protect your account and respond to your request within <strong>14 days</strong>.
                   </p>
                 </div>
 
@@ -570,7 +580,7 @@ export const Privacy: React.FC = () => {
                   NestList is strictly intended for adult users who are <strong>18 years of age and above</strong> (the legal age to sign tenancy agreements or own property in Kenya). We do not intentionally collect, store, or solicit data from minors under 18 years.
                 </p>
                 <p>
-                  If you discover that a child has created an unauthorized profile on our website, please notify us immediately at <a href="mailto:gardisonkirui11@gmail.com" className="text-emerald-700 underline font-medium">gardisonkirui11@gmail.com</a>. We will immediately delete their information from our systems.
+                  If you discover that a child has created an unauthorized profile on our website, please notify us immediately at <a href="mailto:info@nestlist.com" className="text-emerald-700 underline font-medium">info@nestlist.com</a>. We will immediately delete their information from our systems.
                 </p>
               </div>
             </section>
@@ -631,7 +641,7 @@ export const Privacy: React.FC = () => {
                     <p className="font-bold text-stone-950 font-serif">Contact Channels</p>
                     <p className="flex items-center gap-2 text-stone-600">
                       <Mail className="h-4 w-4 text-emerald-700" />
-                      <a href="mailto:gardisonkirui11@gmail.com" className="hover:text-emerald-800 hover:underline">gardisonkirui11@gmail.com</a>
+                      <a href="mailto:info@nestlist.com" className="hover:text-emerald-800 hover:underline">info@nestlist.com</a>
                     </p>
                     <p className="flex items-center gap-2 text-stone-600">
                       <Phone className="h-4 w-4 text-emerald-700" />

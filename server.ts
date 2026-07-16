@@ -23,7 +23,7 @@ const ADMIN_PHONE = '+254715185037';
 const ADMIN_EMAIL = 'gardisonkirui11@gmail.com';
 const MPESA_PAYBILL = '247247';
 const MPESA_ACCOUNT = '0715185037';
-const APP_URL = 'https://nestlist-supabase.vercel.app';
+const APP_URL = 'https://nestlist.com';
 
 const LISTING_FEES: Record<string, number> = {
   single_room: 100,
@@ -40,15 +40,61 @@ const AT_API_KEY = 'atsk_6d9fc62e535d5f7de498116c8a9786631be1f4e03974989ca5e14bc
 const AT_USERNAME = 'sandbox';
 const AT_BASE = 'https://api.sandbox.africastalking.com';
 
+// M-Pesa STK Push Config
+const MPESA_KEY = process.env.MPESA_KEY || 'Krt8pu4qFzcfbdsibP2GGPflwcSOqKFWNdMXDXyYkmR1Z1Lk';
+const MPESA_SECRET = process.env.MPESA_SECRET || 'EPlOqQvGl4TTH3bvN1AScB8G16XOuPJLBDMy3f4Dnl8frc4v4NwVl1YJZlClvgTS';
+const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || '174379';
+const MPESA_PASSKEY = process.env.MPESA_PASSKEY || 'bfb279f9aa9bdbcf158695eded2925d4da9a5745fa54a3bbc5c893fdea4d612';
+const MPESA_ENV = process.env.MPESA_ENV || 'sandbox';
+const MPESA_BASE = MPESA_ENV === 'production'
+  ? 'https://api.safaricom.co.ke'
+  : 'https://sandbox.safaricom.co.ke';
+const CALLBACK_URL = process.env.CALLBACK_URL || 'https://nestlist.com/api/mpesa/callback';
+
 // CORS configuration
 app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:3000',
-    'https://nestlist-supabase.vercel.app'
+    'https://nestlist.com',
+    'https://www.nestlist.com'
   ],
   credentials: true
 }));
+
+// M-Pesa Helper Functions
+function formatPhone(phone: string): string {
+  let p = String(phone).replace(/\s+/g, '').replace(/[^0-9+]/g, '');
+  if (p.startsWith('0')) p = '254' + p.slice(1);
+  if (p.startsWith('+254')) p = p.slice(1);
+  if (p.startsWith('+')) p = p.slice(1);
+  if (!p.startsWith('254')) p = '254' + p;
+  return p;
+}
+
+function mpesaTimestamp(): string {
+  return new Date()
+    .toISOString()
+    .replace(/[^0-9]/g, '')
+    .slice(0, 14);
+}
+
+function mpesaPassword(ts: string): string {
+  const str = MPESA_SHORTCODE + MPESA_PASSKEY + ts;
+  return Buffer.from(str).toString('base64');
+}
+
+async function getMpesaToken(): Promise<string> {
+  const creds = Buffer.from(`${MPESA_KEY}:${MPESA_SECRET}`).toString('base64');
+  const res = await axios.get(
+    `${MPESA_BASE}/oauth/v1/generate?grant_type=client_credentials`,
+    { headers: { Authorization: `Basic ${creds}` } }
+  );
+  if (!res.data.access_token) {
+    throw new Error('Failed to get M-Pesa token');
+  }
+  return res.data.access_token;
+}
 
 // =====================================================================
 // SUPABASE REAL DATABASE SETUP
@@ -714,6 +760,392 @@ app.post('/api/listings/:id/payment', async (req, res) => {
   await sendEmail(ADMIN_EMAIL, `New Payment Pending - ${property.title}`, emailHtml);
 
   return res.json({ success: true, message: "Payment submitted for verification" });
+});
+
+// =====================================================================
+// M-PESA STK PUSH ENDPOINTS
+// =====================================================================
+
+// GET /api/mpesa/token
+// Get OAuth token (for testing)
+app.get('/api/mpesa/token', async (req, res) => {
+  try {
+    const token = await getMpesaToken();
+    res.json({ success: true, token });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
+
+// POST /api/mpesa/stk
+// Initiate STK Push
+app.post('/api/mpesa/stk', async (req, res) => {
+  const { phone, amount, propertyId, propertyTitle, landlordId } = req.body;
+
+  if (!phone || !amount || !propertyId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required fields: phone, amount, propertyId'
+    });
+  }
+
+  try {
+    const token = await getMpesaToken();
+    const ts = mpesaTimestamp();
+    const pwd = mpesaPassword(ts);
+    const tel = formatPhone(phone);
+
+    const stkRes = await axios.post(
+      `${MPESA_BASE}/mpesa/stkpush/v1/processrequest`,
+      {
+        BusinessShortCode: MPESA_SHORTCODE,
+        Password: pwd,
+        Timestamp: ts,
+        TransactionType: 'CustomerPayBillOnline',
+        Amount: Math.ceil(amount),
+        PartyA: tel,
+        PartyB: MPESA_SHORTCODE,
+        PhoneNumber: tel,
+        CallBackURL: CALLBACK_URL,
+        AccountReference: 'NESTLIST-' + propertyId.slice(0, 8).toUpperCase(),
+        TransactionDesc: `NestList: ${(propertyTitle || 'Listing Fee').slice(0, 20)}`,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    const d = stkRes.data;
+
+    if (d.ResponseCode !== '0') {
+      throw new Error(
+        d.ResponseDescription ||
+        d.errorMessage ||
+        'STK Push failed'
+      );
+    }
+
+    let paymentId = null;
+
+    if (useRealSupabase) {
+      // Save pending payment to Supabase
+      const { data: payment, error: payErr } = await supabaseClient
+        .from('listing_payments')
+        .insert({
+          property_id: propertyId,
+          landlord_id: landlordId || null,
+          amount: Math.ceil(amount),
+          status: 'pending',
+          mpesa_checkout_request_id: d.CheckoutRequestID,
+          payment_method: 'stk_push',
+        })
+        .select()
+        .single();
+
+      if (payErr) {
+        console.error('Supabase insert error:', payErr);
+      } else {
+        paymentId = payment?.id;
+      }
+
+      // Update property payment_status
+      await supabaseClient
+        .from('properties')
+        .update({ payment_status: 'pending_verification' })
+        .eq('id', propertyId);
+    } else {
+      const db = getMockDb();
+      paymentId = `pay-${Date.now()}`;
+      
+      const mockPayment = {
+        id: paymentId,
+        property_id: propertyId,
+        landlord_id: landlordId || null,
+        amount: Math.ceil(amount),
+        status: 'pending',
+        mpesa_checkout_request_id: d.CheckoutRequestID,
+        payment_method: 'stk_push',
+        created_at: new Date().toISOString()
+      };
+      
+      db.listing_payments.push(mockPayment);
+
+      const prop = db.properties.find(p => p.id === propertyId);
+      if (prop) {
+        prop.payment_status = 'pending_verification';
+      }
+      saveMockDb(db);
+    }
+
+    res.json({
+      success: true,
+      checkoutId: d.CheckoutRequestID,
+      paymentId: paymentId,
+      message: 'STK Push sent! Check your phone.',
+    });
+
+  } catch (err: any) {
+    console.error('STK Push error:', err.response?.data || err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
+// POST /api/mpesa/callback
+// Safaricom webhook — called after user pays or cancels
+app.post('/api/mpesa/callback', async (req, res) => {
+  try {
+    const cb = req.body?.Body?.stkCallback;
+    const checkoutId = cb?.CheckoutRequestID;
+    const resultCode = cb?.ResultCode;
+
+    console.log('M-Pesa callback:', JSON.stringify(cb));
+
+    if (!checkoutId) {
+      return res.json({
+        ResultCode: 0,
+        ResultDesc: 'Accepted'
+      });
+    }
+
+    if (resultCode === 0) {
+      // PAYMENT SUCCESS
+      const items = cb?.CallbackMetadata?.Item || [];
+      const getItem = (name: string) =>
+        items.find((i: any) => i.Name === name)?.Value;
+
+      const mpesaCode = getItem('MpesaReceiptNumber');
+      const amountPaid = getItem('Amount');
+      const payerPhone = getItem('PhoneNumber');
+
+      console.log(`✅ Payment confirmed! Code: ${mpesaCode}`);
+
+      let payment: any = null;
+
+      if (useRealSupabase) {
+        // Update payment record
+        const { data: updatedPayment } = await supabaseClient
+          .from('listing_payments')
+          .update({
+            status: 'confirmed',
+            mpesa_code: mpesaCode,
+            amount_paid: amountPaid,
+            payer_phone: String(payerPhone || ''),
+            verified_at: new Date().toISOString(),
+            verified_by: 'stk_auto',
+          })
+          .eq('mpesa_checkout_request_id', checkoutId)
+          .select()
+          .single();
+        payment = updatedPayment;
+
+        // Activate listing
+        if (payment?.property_id) {
+          await supabaseClient
+            .from('properties')
+            .update({
+              is_active: true,
+              payment_status: 'verified',
+              expires_at: new Date(
+                Date.now() + 30 * 24 * 60 * 60 * 1000
+              ).toISOString(),
+            })
+            .eq('id', payment.property_id);
+        }
+      } else {
+        const db = getMockDb();
+        const pIndex = db.listing_payments.findIndex(pay => pay.mpesa_checkout_request_id === checkoutId);
+        if (pIndex !== -1) {
+          db.listing_payments[pIndex] = {
+            ...db.listing_payments[pIndex],
+            status: 'confirmed',
+            mpesa_code: mpesaCode,
+            amount_paid: amountPaid,
+            payer_phone: String(payerPhone || ''),
+            verified_at: new Date().toISOString(),
+            verified_by: 'stk_auto',
+          };
+          payment = db.listing_payments[pIndex];
+
+          const prop = db.properties.find(p => p.id === payment.property_id);
+          if (prop) {
+            prop.is_active = true;
+            prop.payment_status = 'verified';
+            prop.expires_at = new Date(
+              Date.now() + 30 * 24 * 60 * 60 * 1000
+            ).toISOString();
+          }
+          saveMockDb(db);
+        }
+      }
+
+      // Activate listing details & send notifications
+      if (payment?.property_id) {
+        console.log(`🏠 Listing ${payment.property_id} activated`);
+
+        let landlordProfile: any = null;
+
+        if (payment.landlord_id) {
+          if (useRealSupabase) {
+            const { data: profile } = await supabaseClient
+              .from('profiles')
+              .select('phone, full_name, email')
+              .eq('id', payment.landlord_id)
+              .single();
+            landlordProfile = profile;
+          } else {
+            const db = getMockDb();
+            const profile = db.profiles.find(u => u.id === payment.landlord_id);
+            landlordProfile = profile || { full_name: 'Landlord', phone: String(payerPhone || ''), email: '' };
+          }
+
+          // SMS to landlord
+          if (landlordProfile?.phone) {
+            await sendSMS(
+              landlordProfile.phone,
+              `NestList: ✅ Your listing is now LIVE! Receipt: ${mpesaCode}. Active for 30 days. View at nestlist.com`,
+              'listing_confirmed_stk'
+            );
+          }
+
+          // Email to landlord
+          if (landlordProfile?.email) {
+            await sendEmail(
+              landlordProfile.email,
+              '✅ Your NestList listing is now LIVE!',
+              `
+                <h2>Your listing is live! 🎉</h2>
+                <p>Hi ${landlordProfile.full_name},</p>
+                <p>Your property listing is now visible to thousands of tenants on NestList.</p>
+                <p><strong>M-Pesa Receipt:</strong> ${mpesaCode}</p>
+                <p><strong>Amount Paid:</strong> KES ${amountPaid}</p>
+                <p><strong>Active Until:</strong> ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-KE', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}</p>
+                <p>
+                  <a href="https://nestlist.com/dashboard">
+                    View My Dashboard
+                  </a>
+                </p>
+                <p>The NestList Team</p>
+              `
+            );
+          }
+
+          // SMS to admin
+          await sendSMS(
+            ADMIN_PHONE,
+            `NestList: New STK listing activated! Landlord: ${landlordProfile?.full_name}. Code: ${mpesaCode}. Amount: KES ${amountPaid}`,
+            'admin_stk_notification'
+          );
+        }
+      }
+
+    } else {
+      // PAYMENT FAILED OR CANCELLED
+      const reason = cb?.ResultDesc || 'Payment was not completed';
+      console.log(`❌ Payment failed: ${reason}`);
+
+      const statusVal = resultCode === 1032 ? 'cancelled' : 'failed';
+
+      if (useRealSupabase) {
+        await supabaseClient
+          .from('listing_payments')
+          .update({
+            status: statusVal,
+            failure_reason: reason,
+          })
+          .eq('mpesa_checkout_request_id', checkoutId);
+      } else {
+        const db = getMockDb();
+        const pIndex = db.listing_payments.findIndex(pay => pay.mpesa_checkout_request_id === checkoutId);
+        if (pIndex !== -1) {
+          db.listing_payments[pIndex].status = statusVal;
+          db.listing_payments[pIndex].failure_reason = reason;
+          saveMockDb(db);
+        }
+      }
+    }
+
+  } catch (err: any) {
+    console.error('Callback error:', err.message);
+  }
+
+  // ALWAYS return 200 to Safaricom
+  res.status(200).json({
+    ResultCode: 0,
+    ResultDesc: 'Accepted'
+  });
+});
+
+// GET /api/mpesa/status
+// Poll payment status
+app.get('/api/mpesa/status', async (req, res) => {
+  const { checkoutId, propertyId } = req.query;
+
+  if (!checkoutId && !propertyId) {
+    return res.status(400).json({
+      error: 'Provide checkoutId or propertyId'
+    });
+  }
+
+  try {
+    let payment: any = null;
+
+    if (useRealSupabase) {
+      let query = supabaseClient
+        .from('listing_payments')
+        .select('status, mpesa_code, amount_paid, failure_reason');
+
+      if (checkoutId) {
+        query = query.eq('mpesa_checkout_request_id', checkoutId);
+      } else {
+        query = query.eq('property_id', propertyId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+      }
+
+      const { data, error } = await query.maybeSingle();
+      if (!error && data) {
+        payment = data;
+      }
+    } else {
+      const db = getMockDb();
+      if (checkoutId) {
+        payment = db.listing_payments.find(pay => pay.mpesa_checkout_request_id === checkoutId);
+      } else {
+        const filtered = db.listing_payments.filter(pay => pay.property_id === propertyId);
+        if (filtered.length > 0) {
+          filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          payment = filtered[0];
+        }
+      }
+    }
+
+    if (!payment) {
+      return res.json({ status: 'pending' });
+    }
+
+    res.json({
+      status: payment.status,
+      mpesaCode: payment.mpesa_code || payment.mpesaCode || null,
+      amount: payment.amount_paid || payment.amount || null,
+      failureReason: payment.failure_reason || payment.rejection_reason || null,
+    });
+
+  } catch (err: any) {
+    res.json({ status: 'pending' });
+  }
 });
 
 // ── ADMIN ENDPOINTS ──────────────────────────────────────────────────

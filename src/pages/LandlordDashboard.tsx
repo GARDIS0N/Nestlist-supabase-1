@@ -1505,7 +1505,7 @@ export const LandlordDashboard: React.FC = () => {
               {/* Copy Link */}
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://nestlist-supabase.vercel.app/listing/${sharingProperty.id}`);
+                  navigator.clipboard.writeText(`https://nestlist.com/listing/${sharingProperty.id}`);
                   showToast("✅ Link copied!", "success");
                 }}
                 className="w-full min-h-[48px] flex items-center justify-center space-x-2 p-3 bg-stone-100 hover:bg-stone-200 rounded-xl text-sm font-bold text-stone-800 transition"
@@ -1516,7 +1516,7 @@ export const LandlordDashboard: React.FC = () => {
 
               {/* WhatsApp */}
               <a
-                href={`https://wa.me/?text=Check%20out%20this%20property%20on%20NestList%3A%20${encodeURIComponent(sharingProperty.title)}%20in%20${encodeURIComponent(sharingProperty.location)}%20-%20KSh%20${sharingProperty.price}%2Fmo%20https%3A%2F%2Fnestlist-supabase.vercel.app%2Flisting%2F${sharingProperty.id}`}
+                href={`https://wa.me/?text=Check%20out%20this%20property%20on%20NestList%3A%20${encodeURIComponent(sharingProperty.title)}%20in%20${encodeURIComponent(sharingProperty.location)}%20-%20KSh%20${sharingProperty.price}%2Fmo%20https%3A%2F%2Fnestlist.com%2Flisting%2F${sharingProperty.id}`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full min-h-[48px] flex items-center justify-center space-x-2 p-3 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 rounded-xl text-sm font-bold transition"
@@ -1526,7 +1526,7 @@ export const LandlordDashboard: React.FC = () => {
 
               {/* SMS */}
               <a
-                href={`sms:?body=Check%20out%20this%20property%20on%20NestList%3A%20${encodeURIComponent(sharingProperty.title)}%20in%20${encodeURIComponent(sharingProperty.location)}%20-%20KSh%20${sharingProperty.price}%2Fmo%20https%3A%2F%2Fnestlist-supabase.vercel.app%2Flisting%2F${sharingProperty.id}`}
+                href={`sms:?body=Check%20out%20this%20property%20on%20NestList%3A%20${encodeURIComponent(sharingProperty.title)}%20in%20${encodeURIComponent(sharingProperty.location)}%20-%20KSh%20${sharingProperty.price}%2Fmo%20https%3A%2F%2Fnestlist.com%2Flisting%2F${sharingProperty.id}`}
                 className="w-full min-h-[48px] flex items-center justify-center space-x-2 p-3 bg-blue-50 text-blue-800 hover:bg-blue-100 rounded-xl text-sm font-bold transition"
               >
                 <span>📱 Share via SMS</span>
@@ -1534,7 +1534,7 @@ export const LandlordDashboard: React.FC = () => {
 
               {/* Twitter / X */}
               <a
-                href={`https://twitter.com/intent/tweet?text=Check%20out%20this%20property%20on%20NestList%3A%20${encodeURIComponent(sharingProperty.title)}%20in%20${encodeURIComponent(sharingProperty.location)}%20-%20KSh%20${sharingProperty.price}%2Fmo%20https%3A%2F%2Fnestlist-supabase.vercel.app%2Flisting%2F${sharingProperty.id}`}
+                href={`https://twitter.com/intent/tweet?text=Check%20out%20this%20property%20on%20NestList%3A%20${encodeURIComponent(sharingProperty.title)}%20in%20${encodeURIComponent(sharingProperty.location)}%20-%20KSh%20${sharingProperty.price}%2Fmo%20https%3A%2F%2Fnestlist.com%2Flisting%2F${sharingProperty.id}`}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full min-h-[48px] flex items-center justify-center space-x-2 p-3 bg-stone-900 text-white hover:bg-stone-800 rounded-xl text-sm font-bold transition"

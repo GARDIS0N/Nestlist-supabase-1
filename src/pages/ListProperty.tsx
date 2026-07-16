@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { PhotoUpload } from "../components/PhotoUpload";
+import { MpesaSTKPush } from "../components/MpesaSTKPush";
 import { 
   MapPin, CheckSquare, Sparkles, Building, ChevronRight, ChevronLeft, 
   Loader2, ShieldCheck, Check, Clock, Phone, AlertTriangle, X, Hash, MessageSquare 
@@ -71,6 +72,7 @@ export const ListProperty: React.FC = () => {
   const [paying, setPaying] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"idle" | "pending_verification" | "verified" | "rejected">("idle");
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"stk_push" | "manual_paybill">("stk_push");
 
   // Copy status
   const [copiedPaybill, setCopiedPaybill] = useState(false);
@@ -958,244 +960,290 @@ export const ListProperty: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* ACTIVE MANUAL PAYMENT SUBMISSION BOX */
+              /* ACTIVE DUAL PAYMENT BOX (STK PUSH OR MANUAL PAYBILL) */
               <div className="space-y-6">
                 
-                {/* IMPROVED HEADER WITH M-PESA GREEN/GOLD GRADIENT */}
-                <div 
-                  style={{
-                    background: "linear-gradient(135deg, #0A4D2E, #1E6B4A)"
-                  }}
-                  className="rounded-xl p-4.5 text-white flex justify-between items-center shadow-md select-none"
-                >
-                  <div className="flex items-center space-x-3">
-                    <span className="text-2xl shrink-0">📱</span>
-                    <div>
-                      <h2 className="text-[18px] font-bold text-white leading-tight">Pay via M-Pesa</h2>
-                      <p className="text-white/70 text-[13px] font-medium mt-0.5">Lipa Na M-Pesa Paybill</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[22px] font-mono font-black text-white">KSh {getListingFee(selectedType)}</p>
-                    <p className="text-white/60 text-[11px] font-bold uppercase tracking-wider">Listing Fee</p>
-                  </div>
+                {/* PAYMENT METHOD SELECTOR */}
+                <div className="flex bg-[#F1F5F3] p-1.5 rounded-xl border border-[#E2EAE6]">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("stk_push")}
+                    className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 ${
+                      paymentMethod === "stk_push"
+                        ? "bg-white text-[#1E6B4A] shadow-sm"
+                        : "text-stone-500 hover:text-stone-800"
+                    }`}
+                  >
+                    <span>📱</span> Instant STK Push
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("manual_paybill")}
+                    className={`flex-1 py-3 text-xs font-bold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 ${
+                      paymentMethod === "manual_paybill"
+                        ? "bg-white text-[#1E6B4A] shadow-sm"
+                        : "text-stone-500 hover:text-stone-800"
+                    }`}
+                  >
+                    <span>📋</span> Manual Paybill
+                  </button>
                 </div>
 
-                {/* COPYABLE PAYBILL & ACCOUNT BOXES */}
-                <div className="grid grid-cols-2 gap-4">
-                  
-                  {/* Paybill Box */}
-                  <div className="bg-[#F0FDF4] border border-[#A7F3D0] rounded-xl p-3 flex justify-between items-center select-none">
-                    <div>
-                      <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider">PAYBILL NUMBER</p>
-                      <p className="text-2xl font-mono font-black text-[#1E6B4A]">247247</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy("247247", "paybill")}
-                      style={{
-                        background: "#1E6B4A"
-                      }}
-                      className="px-2.5 py-1.5 text-white rounded-lg text-[12px] font-bold hover:opacity-90 transition active:scale-95 shrink-0 ml-1.5"
-                    >
-                      {copiedPaybill ? "Copied! ✓" : "📋 Copy"}
-                    </button>
-                  </div>
-
-                  {/* Account Box */}
-                  <div className="bg-[#F0FDF4] border border-[#A7F3D0] rounded-xl p-3 flex justify-between items-center select-none">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider">ACCOUNT NUMBER</p>
-                      <p className="text-lg font-mono font-extrabold text-stone-950 truncate">0715185037</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy("0715185037", "account")}
-                      style={{
-                        background: "#1E6B4A"
-                      }}
-                      className="px-2.5 py-1.5 text-white rounded-lg text-[12px] font-bold hover:opacity-90 transition active:scale-95 shrink-0 ml-1.5"
-                    >
-                      {copiedAccount ? "Copied! ✓" : "📋 Copy"}
-                    </button>
-                  </div>
-
-                </div>
-
-                {/* NUMBERED STEP CARDS WITH GREEN AND GOLD HIGHLIGHTS */}
-                <div className="space-y-1 bg-stone-50 p-4 rounded-xl border border-stone-200">
-                  <h3 className="text-stone-900 font-extrabold text-xs uppercase tracking-wider mb-2.5">M-Pesa Payment Steps:</h3>
-                  
-                  <div className="space-y-3">
+                {paymentMethod === "stk_push" ? (
+                  /* STATE 1: M-PESA STK PUSH FLOW */
+                  <MpesaSTKPush
+                    propertyId={propertyId || ""}
+                    propertyTitle={title || "Listing Fee"}
+                    amount={getListingFee(selectedType)}
+                    landlordId={profile?.id || ""}
+                    onSuccess={(receipt) => {
+                      setMpesaCode(receipt);
+                      setPaymentStatus("verified");
+                    }}
+                    onFallback={() => setPaymentMethod("manual_paybill")}
+                  />
+                ) : (
+                  /* STATE 2: LIPA NA M-PESA PAYBILL FLOW */
+                  <div className="space-y-6 animate-fade-in">
                     
-                    {/* Step 1 */}
-                    <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
-                      <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
-                        1
+                    {/* IMPROVED HEADER WITH M-PESA GREEN/GOLD GRADIENT */}
+                    <div 
+                      style={{
+                        background: "linear-gradient(135deg, #0A4D2E, #1E6B4A)"
+                      }}
+                      className="rounded-xl p-4.5 text-white flex justify-between items-center shadow-md select-none"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl shrink-0">📋</span>
+                        <div>
+                          <h2 className="text-[18px] font-bold text-white leading-tight">Lipa Na M-Pesa</h2>
+                          <p className="text-white/70 text-[13px] font-medium mt-0.5">Paybill Method</p>
+                        </div>
                       </div>
-                      <p className="text-[14px] text-stone-700 leading-normal">
-                        Go to your M-Pesa menu and select <strong className="text-stone-900">Lipa na M-Pesa</strong>.
-                      </p>
-                    </div>
-
-                    {/* Step 2 */}
-                    <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
-                      <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
-                        2
+                      <div className="text-right">
+                        <p className="text-[22px] font-mono font-black text-white">KSh {getListingFee(selectedType)}</p>
+                        <p className="text-white/60 text-[11px] font-bold uppercase tracking-wider">Listing Fee</p>
                       </div>
-                      <p className="text-[14px] text-stone-700 leading-normal">
-                        Select <strong className="text-stone-900">Paybill</strong> and enter Business Number <strong className="text-[#1E6B4A] font-bold">247247</strong>.
-                      </p>
                     </div>
 
-                    {/* Step 3 */}
-                    <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
-                      <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
-                        3
+                    {/* COPYABLE PAYBILL & ACCOUNT BOXES */}
+                    <div className="grid grid-cols-2 gap-4">
+                      
+                      {/* Paybill Box */}
+                      <div className="bg-[#F0FDF4] border border-[#A7F3D0] rounded-xl p-3 flex justify-between items-center select-none">
+                        <div>
+                          <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider">PAYBILL NUMBER</p>
+                          <p className="text-2xl font-mono font-black text-[#1E6B4A]">247247</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy("247247", "paybill")}
+                          style={{
+                            background: "#1E6B4A"
+                          }}
+                          className="px-2.5 py-1.5 text-white rounded-lg text-[12px] font-bold hover:opacity-90 transition active:scale-95 shrink-0 ml-1.5"
+                        >
+                          {copiedPaybill ? "Copied! ✓" : "📋 Copy"}
+                        </button>
                       </div>
-                      <p className="text-[14px] text-stone-700 leading-normal">
-                        Enter Account Number <strong className="text-[#1E6B4A] font-bold">0715185037</strong>.
-                      </p>
-                    </div>
 
-                    {/* Step 4 */}
-                    <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
-                      <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
-                        4
+                      {/* Account Box */}
+                      <div className="bg-[#F0FDF4] border border-[#A7F3D0] rounded-xl p-3 flex justify-between items-center select-none">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider">ACCOUNT NUMBER</p>
+                          <p className="text-lg font-mono font-extrabold text-stone-950 truncate">0715185037</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy("0715185037", "account")}
+                          style={{
+                            background: "#1E6B4A"
+                          }}
+                          className="px-2.5 py-1.5 text-white rounded-lg text-[12px] font-bold hover:opacity-90 transition active:scale-95 shrink-0 ml-1.5"
+                        >
+                          {copiedAccount ? "Copied! ✓" : "📋 Copy"}
+                        </button>
                       </div>
-                      <p className="text-[14px] text-stone-700 leading-normal">
-                        Enter the exact amount of <strong className="text-[#D97706] font-bold">KSh {getListingFee(selectedType)}</strong>.
-                      </p>
+
                     </div>
 
-                    {/* Step 5 */}
-                    <div className="flex items-start gap-3 pb-1">
-                      <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
-                        5
+                    {/* NUMBERED STEP CARDS WITH GREEN AND GOLD HIGHLIGHTS */}
+                    <div className="space-y-1 bg-stone-50 p-4 rounded-xl border border-stone-200">
+                      <h3 className="text-stone-900 font-extrabold text-xs uppercase tracking-wider mb-2.5">M-Pesa Payment Steps:</h3>
+                      
+                      <div className="space-y-3">
+                        
+                        {/* Step 1 */}
+                        <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
+                          <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
+                            1
+                          </div>
+                          <p className="text-[14px] text-stone-700 leading-normal">
+                            Go to your M-Pesa menu and select <strong className="text-stone-900">Lipa na M-Pesa</strong>.
+                          </p>
+                        </div>
+
+                        {/* Step 2 */}
+                        <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
+                          <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
+                            2
+                          </div>
+                          <p className="text-[14px] text-stone-700 leading-normal">
+                            Select <strong className="text-stone-900">Paybill</strong> and enter Business Number <strong className="text-[#1E6B4A] font-bold">247247</strong>.
+                          </p>
+                        </div>
+
+                        {/* Step 3 */}
+                        <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
+                          <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
+                            3
+                          </div>
+                          <p className="text-[14px] text-stone-700 leading-normal">
+                            Enter Account Number <strong className="text-[#1E6B4A] font-bold">0715185037</strong>.
+                          </p>
+                        </div>
+
+                        {/* Step 4 */}
+                        <div className="flex items-start gap-3 pb-2.5 border-b border-[#F0FDF4]">
+                          <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
+                            4
+                          </div>
+                          <p className="text-[14px] text-stone-700 leading-normal">
+                            Enter the exact amount of <strong className="text-[#D97706] font-bold">KSh {getListingFee(selectedType)}</strong>.
+                          </p>
+                        </div>
+
+                        {/* Step 5 */}
+                        <div className="flex items-start gap-3 pb-1">
+                          <div className="w-7 h-7 bg-[#1E6B4A] text-white font-extrabold text-[13px] rounded-full flex items-center justify-center shrink-0">
+                            5
+                          </div>
+                          <p className="text-[14px] text-stone-700 leading-normal">
+                            Complete payment and enter the 10-character transaction code below to submit.
+                          </p>
+                        </div>
+
                       </div>
-                      <p className="text-[14px] text-stone-700 leading-normal">
-                        Complete payment and enter the 10-character transaction code below to submit.
-                      </p>
                     </div>
 
-                  </div>
-                </div>
-
-                {/* MANUAL PAYMENT SUBMISSION FORM */}
-                <form onSubmit={handleSubmitManualPayment} className="space-y-5">
-                  {paymentError && (
-                    <div className="p-4 bg-red-50 text-red-800 border border-red-150 rounded-xl text-xs sm:text-sm font-medium flex items-start space-x-2">
-                      <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
-                      <p className="leading-relaxed">{paymentError}</p>
-                    </div>
-                  )}
-
-                  {/* Confirmation Code Input with Auto-uppercase & Checkmark */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[11px] font-bold text-stone-700 uppercase tracking-wider">
-                        M-PESA CONFIRMATION CODE
-                      </label>
-                      <span className="text-[11px] text-stone-400 font-semibold">{mpesaCode.length}/10</span>
-                    </div>
-                    
-                    <div className="relative">
-                      <Hash className="absolute left-3.5 top-[15px] h-4.5 w-4.5 text-stone-400" />
-                      <input
-                        type="text"
-                        value={mpesaCode.toUpperCase()}
-                        onChange={(e) => setMpesaCode(e.target.value.slice(0, 12))}
-                        placeholder="e.g. QBG582Y78X"
-                        style={{ letterSpacing: "2px" }}
-                        className="w-full pl-10 pr-10 py-3.5 border-2 border-[#E2EAE6] rounded-xl text-lg font-mono uppercase focus:outline-none focus:border-[#1E6B4A] transition"
-                        required
-                      />
-                      {mpesaCode.length >= 10 && (
-                        <div className="absolute right-3.5 top-3 bg-[#F0FDF4] text-emerald-600 rounded-full p-1 border border-emerald-300">
-                          <Check className="h-4 w-4 stroke-[3]" />
+                    {/* MANUAL PAYMENT SUBMISSION FORM */}
+                    <form onSubmit={handleSubmitManualPayment} className="space-y-5">
+                      {paymentError && (
+                        <div className="p-4 bg-red-50 text-red-800 border border-red-150 rounded-xl text-xs sm:text-sm font-medium flex items-start space-x-2">
+                          <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                          <p className="leading-relaxed">{paymentError}</p>
                         </div>
                       )}
-                    </div>
-                    <p className="text-[11px] text-stone-400">
-                      From your Safaricom SMS e.g. QBG582Y78X
-                    </p>
-                  </div>
 
-                  {/* Sender Phone Number */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-stone-700 uppercase tracking-wider block">
-                      SENDER PHONE NUMBER (OPTIONAL)
-                    </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3.5 top-3.5 h-4.5 w-4.5 text-stone-400" />
-                      <input
-                        type="tel"
-                        value={mpesaPhone}
-                        onChange={(e) => setMpesaPhone(e.target.value)}
-                        placeholder="e.g. 0715185037"
-                        className="w-full pl-10 pr-4 py-3 border border-stone-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <p className="text-[11px] text-stone-400">
-                      The Safaricom number that initiated the Paybill payment to help verify.
-                    </p>
-                  </div>
+                      {/* Confirmation Code Input with Auto-uppercase & Checkmark */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[11px] font-bold text-stone-700 uppercase tracking-wider">
+                            M-PESA CONFIRMATION CODE
+                          </label>
+                          <span className="text-[11px] text-stone-400 font-semibold">{mpesaCode.length}/10</span>
+                        </div>
+                        
+                        <div className="relative">
+                          <Hash className="absolute left-3.5 top-[15px] h-4.5 w-4.5 text-stone-400" />
+                          <input
+                            type="text"
+                            value={mpesaCode.toUpperCase()}
+                            onChange={(e) => setMpesaCode(e.target.value.slice(0, 12))}
+                            placeholder="e.g. QBG582Y78X"
+                            style={{ letterSpacing: "2px" }}
+                            className="w-full pl-10 pr-10 py-3.5 border-2 border-[#E2EAE6] rounded-xl text-lg font-mono uppercase focus:outline-none focus:border-[#1E6B4A] transition"
+                            required
+                          />
+                          {mpesaCode.length >= 10 && (
+                            <div className="absolute right-3.5 top-3 bg-[#F0FDF4] text-emerald-600 rounded-full p-1 border border-emerald-300">
+                              <Check className="h-4 w-4 stroke-[3]" />
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-stone-400">
+                          From your Safaricom SMS e.g. QBG582Y78X
+                        </p>
+                      </div>
 
-                  {/* RE-DESIGNED SUBMIT PAYMENT CONFIRMATION CODE BUTTON (DARK GREEN GRADIENT) */}
-                  <button
-                    type="submit"
-                    disabled={paying || !mpesaCode}
-                    style={{
-                      background: "linear-gradient(135deg, #1E6B4A, #2D9E6B)",
-                      boxShadow: "0 4px 16px rgba(30,107,74,0.3)"
-                    }}
-                    className="w-full flex items-center justify-center space-x-2 py-[14px] px-4 text-white font-bold text-[15px] rounded-xl shadow-lg hover:opacity-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {paying ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4 stroke-[3]" />
-                        <span>✓ Submit Payment Confirmation Code</span>
-                      </>
-                    )}
-                  </button>
+                      {/* Sender Phone Number */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-stone-700 uppercase tracking-wider block">
+                          SENDER PHONE NUMBER (OPTIONAL)
+                        </label>
+                        <div className="relative">
+                          <Phone className="absolute left-3.5 top-3.5 h-4.5 w-4.5 text-stone-400" />
+                          <input
+                            type="tel"
+                            value={mpesaPhone}
+                            onChange={(e) => setMpesaPhone(e.target.value)}
+                            placeholder="e.g. 0715185037"
+                            className="w-full pl-10 pr-4 py-3 border border-stone-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                        <p className="text-[11px] text-stone-400">
+                          The Safaricom number that initiated the Paybill payment to help verify.
+                        </p>
+                      </div>
 
-                  {/* COMPONENT 2 — Terms Footer Banner */}
-                  <p className="text-[11px] text-stone-500 leading-normal text-center select-none">
-                    By submitting this payment you confirm you have read and agree to NestList's{" "}
-                    <Link to="/terms" target="_blank" className="text-[#1E6B4A] hover:underline font-bold">
-                      Terms of Service
+                      {/* SUBMIT BUTTON */}
+                      <button
+                        type="submit"
+                        disabled={paying || !mpesaCode}
+                        style={{
+                          background: "linear-gradient(135deg, #1E6B4A, #2D9E6B)",
+                          boxShadow: "0 4px 16px rgba(30,107,74,0.3)"
+                        }}
+                        className="w-full flex items-center justify-center space-x-2 py-[14px] px-4 text-white font-bold text-[15px] rounded-xl shadow-lg hover:opacity-95 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {paying ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <>
+                            <Check className="h-4 w-4 stroke-[3]" />
+                            <span>✓ Submit Payment Confirmation Code</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Terms Footer Banner */}
+                      <p className="text-[11px] text-stone-500 leading-normal text-center select-none">
+                        By submitting this payment you confirm you have read and agree to NestList's{" "}
+                        <Link to="/terms" target="_blank" className="text-[#1E6B4A] hover:underline font-bold">
+                          Terms of Service
                     </Link>{" "}
                     and that the M-Pesa code is genuine.
                   </p>
 
-                  {/* Reassurance Message Banner */}
-                  <div className="bg-[#F0FDF4] rounded-[10px] p-3 text-[13px] text-[#065F46] leading-normal flex items-start gap-1.5 select-none">
-                    <span>⚡</span>
-                    <span>Listings are typically verified within <strong>30 minutes</strong> during business hours (8am-8pm). You'll receive an SMS confirmation when live.</span>
-                  </div>
+                      {/* Reassurance Message Banner */}
+                      <div className="bg-[#F0FDF4] rounded-[10px] p-3 text-[13px] text-[#065F46] leading-normal flex items-start gap-1.5 select-none">
+                        <span>⚡</span>
+                        <span>Listings are typically verified within <strong>30 minutes</strong> during business hours (8am-8pm). You'll receive an SMS confirmation when live.</span>
+                      </div>
 
-                  {/* Fraud Warning Banner */}
-                  <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-2.5 text-[12px] text-[#991B1B] leading-normal flex items-start gap-1.5 select-none">
-                    <span>⚠️</span>
-                    <span><strong>NestList will NEVER ask for your M-Pesa PIN.</strong> Only submit the confirmation code from your SMS.</span>
-                  </div>
-                </form>
+                      {/* Fraud Warning Banner */}
+                      <div className="bg-[#FEF2F2] border border-[#FECACA] rounded-lg p-2.5 text-[12px] text-[#991B1B] leading-normal flex items-start gap-1.5 select-none">
+                        <span>⚠️</span>
+                        <span><strong>NestList will NEVER ask for your M-Pesa PIN.</strong> Only submit the confirmation code from your SMS.</span>
+                      </div>
+                    </form>
 
-                {/* WhatsApp Support Link */}
-                <div className="text-center pt-2 select-none border-t border-stone-100">
-                  <p className="text-xs text-stone-400">Need help? Contact us on WhatsApp</p>
-                  <a 
-                    href="https://wa.me/254715185037" 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-[#1E6B4A] font-bold hover:underline"
-                  >
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    <span>📞 +254715185037</span>
-                  </a>
-                </div>
+                    {/* WhatsApp Support Link */}
+                    <div className="text-center pt-2 select-none border-t border-stone-100">
+                      <p className="text-xs text-stone-400">Need help? Contact us on WhatsApp</p>
+                      <a 
+                        href="https://wa.me/254715185037" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-[#1E6B4A] font-bold hover:underline"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>📞 +254715185037</span>
+                      </a>
+                    </div>
+
+                  </div>
+                )}
 
               </div>
             )}
