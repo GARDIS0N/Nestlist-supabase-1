@@ -51,6 +51,10 @@ export const ListProperty: React.FC = () => {
   // Wizard Step Control
   const [step, setStep] = useState(1);
 
+  // Listing Model State
+  const [listingModel, setListingModel] = useState<"flat_fee" | "pay_per_lead">("flat_fee");
+  const [showModelSelection, setShowModelSelection] = useState(true);
+
   // Property Form State
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const [tempId] = useState(() => "temp-" + Math.random().toString(36).slice(2, 10));
@@ -87,6 +91,7 @@ export const ListProperty: React.FC = () => {
     if (isResume && propId && pType) {
       setPropertyId(propId);
       setSelectedType(pType);
+      setShowModelSelection(false);
       setStep(5); // Jump straight to payment step
     }
 
@@ -156,7 +161,8 @@ export const ListProperty: React.FC = () => {
             amenities: selectedAmenities,
             images: uploadedImages,
             status: "available",
-            is_active: false
+            is_active: false,
+            listing_model: listingModel
           })
           .select()
           .single();
@@ -264,6 +270,116 @@ export const ListProperty: React.FC = () => {
 
   const totalSteps = 5;
   const stepLabels = ["Details", "Amenities", "Photos", "Review", "Pay"];
+
+  if (showModelSelection) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-[#FAFAF8] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-[640px] bg-white border border-[#E2EAE6] rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+          <div className="text-center space-y-2">
+            <span className="text-4xl">💰</span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-stone-900 font-sans mt-3">
+              How would you like to list?
+            </h1>
+            <p className="text-stone-500 text-sm max-w-md mx-auto">
+              Choose the payment model that works best for you.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {/* Option 1: FLAT FEE */}
+            <div
+              onClick={() => setListingModel("flat_fee")}
+              className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 relative ${
+                listingModel === "flat_fee"
+                  ? "border-[#1E6B4A] bg-[#F0FDF4] shadow-sm"
+                  : "border-[#E2EAE6] bg-white hover:border-stone-300"
+              }`}
+            >
+              {listingModel === "flat_fee" && (
+                <div className="absolute top-4 right-4 bg-[#1E6B4A] text-white p-1 rounded-full">
+                  <Check className="h-4 w-4 stroke-[3]" />
+                </div>
+              )}
+              <div className="flex gap-4">
+                <span className="text-3xl shrink-0">📋</span>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-stone-900 text-base">Pay Once, List for 30 Days</h3>
+                    <span className="bg-stone-200 text-stone-700 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">Traditional</span>
+                  </div>
+                  <p className="text-stone-600 text-xs leading-relaxed">
+                    Pay a one-time listing fee based on your property type. Your listing stays live for 30 days regardless of how many inquiries you receive.
+                  </p>
+                  <p className="text-[#1E6B4A] font-bold text-xs pt-1">
+                    From KES 100 (Single Room) to KES 1,500 (5+ Bedroom)
+                  </p>
+                  <div className="text-stone-500 text-[11px] pt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                    <span>✅ Properties that rent quickly</span>
+                    <span>✅ Landlords who want certainty</span>
+                    <span>✅ High-demand estates</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Option 2: PAY PER LEAD */}
+            <div
+              onClick={() => setListingModel("pay_per_lead")}
+              className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 relative ${
+                listingModel === "pay_per_lead"
+                  ? "border-[#D97706] bg-[#FFFBEB] shadow-sm"
+                  : "border-[#E2EAE6] bg-white hover:border-stone-300"
+              }`}
+            >
+              {listingModel === "pay_per_lead" && (
+                <div className="absolute top-4 right-4 bg-[#D97706] text-white p-1 rounded-full">
+                  <Check className="h-4 w-4 stroke-[3]" />
+                </div>
+              )}
+              <div className="flex gap-4">
+                <span className="text-3xl shrink-0">🔓</span>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-stone-900 text-base">List Free, Pay Per Inquiry</h3>
+                    <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full">⚡ New</span>
+                  </div>
+                  <p className="text-stone-600 text-xs leading-relaxed">
+                    Post your listing for free. Only pay when you choose to unlock a tenant's contact details. No upfront cost.
+                  </p>
+                  <p className="text-[#D97706] font-bold text-xs pt-1">
+                    From KES 25 per lead (Single Room) to KES 300 per lead (5+ Bedroom)
+                  </p>
+                  <div className="text-stone-500 text-[11px] pt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+                    <span>✅ Properties in new areas</span>
+                    <span>✅ Testing the market first</span>
+                    <span>✅ Landlords on tight budgets</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {listingModel === "pay_per_lead" && (
+              <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl p-3.5 text-xs text-amber-950 font-medium text-center">
+                💡 Buy 5 leads upfront and save up to 20%
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowModelSelection(false)}
+            style={{
+              background: "linear-gradient(135deg, #1E6B4A, #2D9E6B)",
+              boxShadow: "0 4px 12px rgba(30,107,74,0.2)"
+            }}
+            className="w-full py-3.5 text-white font-extrabold text-sm rounded-xl transition hover:opacity-95 flex items-center justify-center gap-1.5"
+          >
+            <span>Continue with {listingModel === "flat_fee" ? "Flat Fee" : "Pay Per Lead"}</span>
+            <span>→</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-[#FAFAF8] flex flex-col">
@@ -853,7 +969,37 @@ export const ListProperty: React.FC = () => {
             {/* Top gold aesthetic light */}
             <div className="absolute top-0 right-0 h-32 w-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none"></div>
 
-            {paymentStatus === "verified" ? (
+            {listingModel === "pay_per_lead" ? (
+              /* PAY-PER-LEAD SUCCESS VIEW */
+              <div className="text-center py-6 space-y-5 animate-fade-in select-none">
+                <div className="mx-auto h-16 w-16 bg-[#F0FDF4] text-[#1E6B4A] border-2 border-primary-300 rounded-full flex items-center justify-center shadow-lg">
+                  <Check className="h-9 w-9 stroke-[3.5]" />
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-extrabold text-[#0F1A14] font-sans">Pay-Per-Lead Listing Saved!</h2>
+                  <p className="text-[#4B5E54] text-sm leading-relaxed max-w-sm mx-auto">
+                    Awesome! Your property has been saved successfully using the <span className="font-bold text-[#1E6B4A]">Pay-Per-Lead model</span>.
+                  </p>
+                  <p className="text-[#4B5E54] text-xs leading-relaxed max-w-md mx-auto pt-2">
+                    No upfront payment is required. You can list for free and only pay when you choose to unlock a tenant's contact details. Your listing is saved as pending and will be activated on your dashboard.
+                  </p>
+                </div>
+
+                <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    onClick={() => navigate("/dashboard")}
+                    style={{
+                      background: "linear-gradient(135deg, #1E6B4A, #2D9E6B)",
+                      boxShadow: "0 4px 16px rgba(30,107,74,0.3)"
+                    }}
+                    className="w-full sm:w-auto py-3 px-6 text-white font-bold text-sm rounded-xl transition hover:opacity-95"
+                  >
+                    Go to Dashboard
+                  </button>
+                </div>
+              </div>
+            ) : paymentStatus === "verified" ? (
               /* CONGRATULATIONS / VERIFIED PAGE */
               <div className="text-center py-6 space-y-5 animate-fade-in select-none">
                 <div className="mx-auto h-16 w-16 bg-[#F0FDF4] text-emerald-600 border-2 border-emerald-300 rounded-full flex items-center justify-center shadow-lg">

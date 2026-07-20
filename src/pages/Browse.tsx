@@ -62,11 +62,24 @@ export const Browse: React.FC = () => {
   const ITEMS_PER_PAGE = 20;
 
   const sortProperties = (list: any[]) => {
+    const tierPriority: Record<string, number> = {
+      '30day': 4,
+      '14day': 3,
+      '7day': 2,
+      '3day': 1,
+    };
     return [...list].sort((a, b) => {
       const aBoost = a.is_boosted ? 1 : 0;
       const bBoost = b.is_boosted ? 1 : 0;
       if (aBoost !== bBoost) {
         return bBoost - aBoost;
+      }
+      if (a.is_boosted && b.is_boosted) {
+        const aTier = tierPriority[a.boost_tier || ''] || 0;
+        const bTier = tierPriority[b.boost_tier || ''] || 0;
+        if (aTier !== bTier) {
+          return bTier - aTier;
+        }
       }
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
@@ -105,6 +118,8 @@ export const Browse: React.FC = () => {
       const to = from + ITEMS_PER_PAGE - 1;
 
       const { data, count, error } = await query
+        .order("is_boosted", { ascending: false })
+        .order("boost_expires_at", { ascending: false })
         .order("created_at", { ascending: false })
         .range(from, to);
 
@@ -514,7 +529,20 @@ export const Browse: React.FC = () => {
                 <Link
                   key={property.id}
                   to={`/property/${property.id}`}
-                  className="group bg-white rounded-2xl border border-[#E2EAE6] overflow-hidden hover:shadow-xl hover:border-primary-300 hover:ring-2 hover:ring-primary-500/5 transition-all duration-300 flex flex-col h-full"
+                  className={`group bg-white rounded-2xl overflow-hidden hover:shadow-xl hover:border-primary-300 hover:ring-2 hover:ring-primary-500/5 transition-all duration-300 flex flex-col h-full ${
+                    property.is_boosted
+                      ? property.boost_tier === "30day"
+                        ? "border-2 border-[#D97706] animate-gold-shimmer"
+                        : "border-2 border-[#D97706]"
+                      : "border border-[#E2EAE6]"
+                  }`}
+                  style={
+                    property.is_boosted && property.boost_tier !== "30day"
+                      ? {
+                          boxShadow: "0 0 0 1px #FDE68A, 0 8px 24px rgba(217,119,6,0.15)",
+                        }
+                      : undefined
+                  }
                 >
                   {/* Photo Container */}
                   <div className="relative aspect-video w-full overflow-hidden bg-stone-100">
@@ -537,8 +565,11 @@ export const Browse: React.FC = () => {
                         {getPropertyTypeLabel(property.type)}
                       </span>
                       {property.is_boosted && (
-                        <span className="bg-[#D97706] text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm flex items-center space-x-1 animate-pulse">
-                          <span>⚡ Featured</span>
+                        <span 
+                          style={{ background: "linear-gradient(135deg, #D97706, #F59E0B)" }}
+                          className="text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm flex items-center space-x-1"
+                        >
+                          <span>{property.boost_badge || "⚡ Featured"}</span>
                         </span>
                       )}
                     </div>

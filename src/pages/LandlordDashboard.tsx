@@ -9,7 +9,8 @@ import UnlockLead from "../components/UnlockLead";
 import { 
   LayoutDashboard, Plus, MessageSquare, Building2, Eye, Check, X, Loader2, 
   CheckCircle, Clock, AlertTriangle, Send, Share2, Edit, Trash2, Copy, 
-  ExternalLink, Phone, Mail, Coins, ShieldAlert, Sparkles, RefreshCw
+  ExternalLink, Phone, Mail, Coins, ShieldAlert, Sparkles, RefreshCw,
+  Rocket, Lock, Unlock
 } from "lucide-react";
 
 const AMENITIES_LIST = [
@@ -36,11 +37,15 @@ export const LandlordDashboard: React.FC = () => {
   const { profile } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<"listings" | "inquiries">("listings");
+  const [activeTab, setActiveTab] = useState<"listings" | "inquiries" | "credits_boosts">("listings");
   const [properties, setProperties] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalPaid, setTotalPaid] = useState(0);
+  const [totalUnlocksSpent, setTotalUnlocksSpent] = useState(0);
+  const [boostsList, setBoostsList] = useState<any[]>([]);
+  const [unlocksList, setUnlocksList] = useState<any[]>([]);
+  const [inquiryFilter, setInquiryFilter] = useState<"all" | "unlocked" | "locked">("all");
 
   // States for modals and flows
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
@@ -126,6 +131,40 @@ export const LandlordDashboard: React.FC = () => {
       if (!paymentsError && paymentsData) {
         const sum = paymentsData.reduce((acc, curr) => acc + (curr.amount || 0), 0);
         setTotalPaid(sum);
+      }
+
+      // Fetch unlocks paid
+      const { data: unlocksData, error: unlocksError } = await supabase
+        .from("lead_unlocks")
+        .select("amount_paid")
+        .eq("landlord_id", profile.id)
+        .eq("status", "confirmed");
+
+      if (!unlocksError && unlocksData) {
+        const sum = unlocksData.reduce((acc, curr) => acc + (curr.amount_paid || 0), 0);
+        setTotalUnlocksSpent(sum);
+      }
+
+      // Fetch all boosts for history
+      const { data: boostsHistory } = await supabase
+        .from("listing_boosts")
+        .select("*, property:properties(title)")
+        .eq("landlord_id", profile.id)
+        .order("created_at", { ascending: false });
+
+      if (boostsHistory) {
+        setBoostsList(boostsHistory);
+      }
+
+      // Fetch all unlocks for history
+      const { data: unlocksHistory } = await supabase
+        .from("lead_unlocks")
+        .select("*, property:properties(title)")
+        .eq("landlord_id", profile.id)
+        .order("created_at", { ascending: false });
+
+      if (unlocksHistory) {
+        setUnlocksList(unlocksHistory);
       }
 
       // 4. Calculate Stats
@@ -563,6 +602,14 @@ export const LandlordDashboard: React.FC = () => {
     return false;
   };
 
+  const getBoostDaysLeft = (expiresAtStr: string | null) => {
+    if (!expiresAtStr) return 0;
+    const exp = new Date(expiresAtStr);
+    const diffTime = exp.getTime() - Date.now();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
   // Performance calculations (Change 11)
   const totalViews = properties.reduce((sum, p) => sum + (p.view_count || 0), 0);
   const oneWeekAgo = new Date();
@@ -646,63 +693,105 @@ export const LandlordDashboard: React.FC = () => {
       </div>
 
       {/* CHANGE 2 — REDESIGN STAT CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-grid">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3" id="stats-grid">
         {/* CARD 1 — TOTAL LISTINGS */}
-        <div className="bg-white p-4.5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between" style={{ borderTop: "3px solid #1E6B4A" }}>
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between" style={{ borderTop: "3px solid #1E6B4A" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Total Listings</span>
-            <div className="p-2 rounded-xl text-green-700" style={{ background: "#F0FDF4" }}>
-              <Building2 className="h-5 w-5" />
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Total Listings</span>
+            <div className="p-1.5 rounded-lg text-green-700" style={{ background: "#F0FDF4" }}>
+              <Building2 className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black" style={{ color: "#1E6B4A" }}>{stats.totalProperties}</span>
-            <p className="text-[10px] text-gray-400 font-semibold mt-0.5">All time listings</p>
+          <div className="mt-2">
+            <span className="text-xl font-black" style={{ color: "#1E6B4A" }}>{stats.totalProperties}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">All time listings</p>
           </div>
         </div>
 
         {/* CARD 2 — ACTIVE LISTINGS */}
-        <div className="bg-white p-4.5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between" style={{ borderTop: "3px solid #2D9E6B" }}>
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between" style={{ borderTop: "3px solid #2D9E6B" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Active Now</span>
-            <div className="p-2 rounded-xl text-green-600" style={{ background: "#DCFCE7" }}>
-              <CheckCircle className="h-5 w-5" />
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Active Now</span>
+            <div className="p-1.5 rounded-lg text-green-600" style={{ background: "#DCFCE7" }}>
+              <CheckCircle className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black" style={{ color: "#2D9E6B" }}>{stats.activeCount}</span>
-            <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Visible to tenants</p>
+          <div className="mt-2">
+            <span className="text-xl font-black" style={{ color: "#2D9E6B" }}>{stats.activeCount}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">Visible to tenants</p>
           </div>
         </div>
 
         {/* CARD 3 — TENANT INQUIRIES */}
-        <div className="bg-white p-4.5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between relative" style={{ borderTop: "3px solid #D97706" }}>
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between relative" style={{ borderTop: "3px solid #D97706" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Inquiries</span>
-            <div className="p-2 rounded-xl text-yellow-700 relative" style={{ background: "#FEF3C7" }}>
-              <MessageSquare className="h-5 w-5" />
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Inquiries</span>
+            <div className="p-1.5 rounded-lg text-yellow-700 relative" style={{ background: "#FEF3C7" }}>
+              <MessageSquare className="h-4 w-4" />
               {inquiries.filter(i => i.status === "pending").length > 0 && (
-                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-600 animate-ping"></span>
+                <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-600 animate-ping"></span>
               )}
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black" style={{ color: "#D97706" }}>{stats.inquiryCount}</span>
-            <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Total received leads</p>
+          <div className="mt-2">
+            <span className="text-xl font-black" style={{ color: "#D97706" }}>{stats.inquiryCount}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">Total received leads</p>
           </div>
         </div>
 
         {/* CARD 4 — FEES PAID */}
-        <div className="bg-white p-4.5 rounded-2xl border border-stone-200/80 shadow-sm flex flex-col justify-between" style={{ borderTop: "3px solid #0A4D2E" }}>
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between" style={{ borderTop: "3px solid #0A4D2E" }}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Fees Paid</span>
-            <div className="p-2 rounded-xl text-green-900" style={{ background: "#F0FDF4" }}>
-              <Coins className="h-5 w-5" />
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Fees Paid</span>
+            <div className="p-1.5 rounded-lg text-green-900" style={{ background: "#F0FDF4" }}>
+              <Coins className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-lg font-black text-emerald-950">KES {totalPaid.toLocaleString()}</span>
-            <p className="text-[10px] text-gray-400 font-semibold mt-0.5">To NestList Hub</p>
+          <div className="mt-2">
+            <span className="text-sm font-black text-emerald-950">KES {totalPaid.toLocaleString()}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">Upfront listing fees</p>
+          </div>
+        </div>
+
+        {/* CARD 5 — ACTIVE BOOSTS */}
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between" style={{ borderTop: "3px solid #D97706" }}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Active Boosts</span>
+            <div className="p-1.5 rounded-lg text-amber-700" style={{ background: "#FFFBEB" }}>
+              <Rocket className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <span className="text-xl font-black text-amber-700">{properties.filter(p => p.is_boosted).length}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">Properties boosted</p>
+          </div>
+        </div>
+
+        {/* CARD 6 — LOCKED LEADS */}
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between" style={{ borderTop: "3px solid #EA580C" }}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Locked Leads</span>
+            <div className="p-1.5 rounded-lg text-orange-600" style={{ background: "#FFF7ED" }}>
+              <Lock className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <span className="text-xl font-black text-orange-600">{inquiries.filter(i => i.is_locked).length}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">Awaiting unlock</p>
+          </div>
+        </div>
+
+        {/* CARD 7 — LEADS REVENUE SPENT */}
+        <div className="bg-white p-3 rounded-xl border border-stone-200/80 shadow-xs flex flex-col justify-between" style={{ borderTop: "3px solid #B45309" }}>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Leads Spent</span>
+            <div className="p-1.5 rounded-lg text-amber-800" style={{ background: "#FFFBEB" }}>
+              <Unlock className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <span className="text-sm font-black text-amber-800">KES {totalUnlocksSpent.toLocaleString()}</span>
+            <p className="text-[9px] text-gray-400 font-semibold mt-0.5">Total spent on leads</p>
           </div>
         </div>
       </div>
@@ -768,6 +857,16 @@ export const LandlordDashboard: React.FC = () => {
             }`}
           >
             Inquiries Received ({inquiries.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("credits_boosts")}
+            className={`py-3 text-sm font-bold border-b-2 transition ${
+              activeTab === "credits_boosts"
+                ? "border-emerald-600 text-[#0A4D2E]"
+                : "border-transparent text-stone-500 hover:text-stone-900"
+            }`}
+          >
+            Credits & Boosts 🚀
           </button>
         </div>
       </div>
@@ -881,7 +980,7 @@ export const LandlordDashboard: React.FC = () => {
                         />
 
                         {/* TOP LEFT BADGE */}
-                        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                        <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
                           {property.is_active && daysLeftObj.daysLeft >= 0 ? (
                             <span className="bg-emerald-600 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow flex items-center space-x-1">
                               <Check className="h-3 w-3 stroke-[3]" />
@@ -903,6 +1002,12 @@ export const LandlordDashboard: React.FC = () => {
                               <span>⚠️ EXPIRED</span>
                             </span>
                           ) : null}
+
+                          {property.listing_model === "pay_per_lead" && (
+                            <span className="bg-blue-600 text-white text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full shadow flex items-center space-x-1 self-start">
+                              <span>🔓 PAY PER LEAD</span>
+                            </span>
+                          )}
                         </div>
 
                         {/* TOP RIGHT: View count */}
@@ -963,7 +1068,7 @@ export const LandlordDashboard: React.FC = () => {
                         </div>
 
                         {/* Expiry Pill badge */}
-                        <div className="pt-1.5">
+                        <div className="pt-1.5 flex flex-wrap gap-1.5">
                           <span
                             style={{
                               color: daysLeftObj.color,
@@ -977,65 +1082,110 @@ export const LandlordDashboard: React.FC = () => {
                             <span>{daysLeftObj.icon}</span>
                             <span>{daysLeftObj.text}</span>
                           </span>
+
+                          {property.listing_model === "pay_per_lead" && (
+                            property.lead_credits > 1 ? (
+                              <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs">
+                                <span>🔓 {property.lead_credits} lead credits</span>
+                              </span>
+                            ) : property.lead_credits === 1 ? (
+                              <span className="bg-amber-100 text-amber-800 border border-amber-200 inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs">
+                                <span>⚠️ 1 lead credit</span>
+                              </span>
+                            ) : (
+                              <span className="bg-red-100 text-red-800 border border-red-200 inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs">
+                                <span>🔒 0 lead credits</span>
+                              </span>
+                            )
+                          )}
                         </div>
                       </div>
                     </div>
 
                     {/* Action buttons row with 48px target compatibility */}
-                    <div className="p-4 pt-0 border-t border-stone-100 bg-stone-50/50 flex flex-wrap items-center gap-2">
-                      <Link
-                        to={`/property/${property.id}`}
-                        className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-stone-300 hover:bg-stone-100 text-stone-700 rounded-xl text-xs font-bold transition shadow-sm"
-                        title="View details"
-                      >
-                        👁 View
-                      </Link>
-
-                      <button
-                        onClick={() => openEditModal(property)}
-                        className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-emerald-500 text-emerald-800 hover:bg-emerald-50 rounded-xl text-xs font-bold transition shadow-sm"
-                      >
-                        ✏️ Edit
-                      </button>
-
-                      {/* Boost / Boosted Button */}
-                      {property.is_boosted ? (
-                        <div className="flex-1 min-w-[50px] min-h-[48px] inline-flex flex-col items-center justify-center px-1 border border-purple-200 bg-purple-50 text-purple-700 rounded-xl text-[10px] font-extrabold shadow-xs">
-                          <span>🔮 BOOSTED</span>
-                          <span className="text-[8px] opacity-75">Active</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setBoostingProperty(property)}
-                          className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-0.5"
+                    <div className="p-4 pt-0 border-t border-stone-100 bg-stone-50/50 flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center gap-2 pt-4">
+                        <Link
+                          to={`/property/${property.id}`}
+                          className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-stone-300 hover:bg-stone-100 text-stone-700 rounded-xl text-xs font-bold transition shadow-sm"
+                          title="View details"
                         >
-                          <span>⚡ Boost</span>
+                          👁 View
+                        </Link>
+
+                        <button
+                          onClick={() => openEditModal(property)}
+                          className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-emerald-500 text-emerald-800 hover:bg-emerald-50 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                          ✏️ Edit
+                        </button>
+
+                        {/* Boost / Boosted Button */}
+                        {property.is_boosted ? (
+                          <div className="flex-1 min-w-[60px] min-h-[48px] inline-flex flex-col items-center justify-center p-1 border border-amber-200 bg-amber-50 text-amber-800 rounded-xl shadow-xs">
+                            <span className="text-[10px] font-extrabold flex items-center gap-0.5">⭐ {getBoostDaysLeft(property.boost_expires_at)} days</span>
+                            <button
+                              onClick={() => setBoostingProperty(property)}
+                              className="text-[9px] font-extrabold text-amber-600 hover:underline active:scale-95"
+                            >
+                              Extend
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setBoostingProperty(property)}
+                            className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border-2 border-amber-500 text-amber-800 hover:bg-amber-50 rounded-xl text-xs font-extrabold transition shadow-sm flex items-center justify-center gap-0.5"
+                          >
+                            <span>🚀 Boost</span>
+                          </button>
+                        )}
+
+                        {/* Renew option if expired/expiring */}
+                        {daysLeftObj.daysLeft <= 7 && (
+                          <button
+                            onClick={() => setRenewingProperty(property)}
+                            className="flex-1 min-w-[55px] min-h-[48px] inline-flex items-center justify-center p-2 bg-[#D97706] hover:bg-[#B45309] text-white rounded-xl text-xs font-bold transition shadow-sm"
+                          >
+                            🔄 Renew
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => setSharingProperty(property)}
+                          className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-stone-300 hover:bg-stone-100 text-stone-700 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                          📤 Share
+                        </button>
+
+                        <button
+                          onClick={() => setDeletePropertyId(property.id)}
+                          className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-red-500 hover:bg-red-50 text-red-700 rounded-xl text-xs font-bold transition shadow-sm"
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+
+                      {property.listing_model === "pay_per_lead" && (
+                        <button
+                          onClick={() => {
+                            setUnlockingInquiry({
+                              inquiryId: undefined, // buying bundle/credits, not unlocking specific inquiry
+                              propertyId: property.id,
+                              propertyTitle: property.title,
+                              propertyType: property.type,
+                              leadCredits: property.lead_credits || 0
+                            });
+                          }}
+                          style={{
+                            background: "#FFFBEB",
+                            border: "1.5px solid #FDE68A",
+                            color: "#D97706"
+                          }}
+                          className="w-full py-2 text-center font-extrabold text-xs rounded-xl shadow-xs hover:bg-[#FEF3C7] transition duration-200"
+                        >
+                          Buy Lead Credits
                         </button>
                       )}
-
-                      {/* Renew option if expired/expiring */}
-                      {daysLeftObj.daysLeft <= 7 && (
-                        <button
-                          onClick={() => setRenewingProperty(property)}
-                          className="flex-1 min-w-[55px] min-h-[48px] inline-flex items-center justify-center p-2 bg-[#D97706] hover:bg-[#B45309] text-white rounded-xl text-xs font-bold transition shadow-sm"
-                        >
-                          🔄 Renew
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => setSharingProperty(property)}
-                        className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-stone-300 hover:bg-stone-100 text-stone-700 rounded-xl text-xs font-bold transition shadow-sm"
-                      >
-                        📤 Share
-                      </button>
-
-                      <button
-                        onClick={() => setDeletePropertyId(property.id)}
-                        className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 border border-red-500 hover:bg-red-50 text-red-700 rounded-xl text-xs font-bold transition shadow-sm"
-                      >
-                        🗑️ Delete
-                      </button>
                     </div>
                   </div>
                 );
@@ -1043,7 +1193,7 @@ export const LandlordDashboard: React.FC = () => {
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === "inquiries" ? (
         /* INQUIRIES RECEIVED TAB (Change 8) */
         inquiries.length === 0 ? (
           <div className="bg-white rounded-2xl border border-stone-200 py-16 px-4 text-center max-w-lg mx-auto shadow-sm">
@@ -1058,7 +1208,41 @@ export const LandlordDashboard: React.FC = () => {
             
             {/* Inquiry Leads List */}
             <div className="lg:col-span-1 space-y-3 max-h-[600px] overflow-y-auto pr-1">
-              {inquiries.map((inquiry) => {
+              {/* Inquiry filters */}
+              <div className="flex bg-stone-100 p-1.5 rounded-xl gap-1 mb-4 border border-stone-200">
+                <button
+                  onClick={() => setInquiryFilter("all")}
+                  className={`flex-1 py-2 text-[11px] font-extrabold rounded-lg transition duration-200 ${
+                    inquiryFilter === "all" ? "bg-white text-stone-900 shadow-sm border border-stone-200/50" : "text-stone-500 hover:text-stone-900"
+                  }`}
+                >
+                  All ({inquiries.length})
+                </button>
+                <button
+                  onClick={() => setInquiryFilter("unlocked")}
+                  className={`flex-1 py-2 text-[11px] font-extrabold rounded-lg transition duration-200 ${
+                    inquiryFilter === "unlocked" ? "bg-white text-emerald-800 shadow-sm border border-stone-200/50" : "text-stone-500 hover:text-stone-900"
+                  }`}
+                >
+                  Unlocked ({inquiries.filter(i => !i.is_locked).length})
+                </button>
+                <button
+                  onClick={() => setInquiryFilter("locked")}
+                  className={`flex-1 py-2 text-[11px] font-extrabold rounded-lg transition duration-200 ${
+                    inquiryFilter === "locked" ? "bg-white text-amber-800 shadow-sm border border-stone-200/50" : "text-stone-500 hover:text-stone-900"
+                  }`}
+                >
+                  Locked 🔒 ({inquiries.filter(i => i.is_locked).length})
+                </button>
+              </div>
+
+              {inquiries
+                .filter((inquiry) => {
+                  if (inquiryFilter === "unlocked") return !inquiry.is_locked;
+                  if (inquiryFilter === "locked") return inquiry.is_locked;
+                  return true;
+                })
+                .map((inquiry) => {
                 const isSelected = selectedInquiryId === inquiry.id;
                 const isUnread = inquiry.status === "pending";
                 const tName = inquiry.tenant_name || inquiry.tenant?.full_name || "Tenant Lead";
@@ -1092,13 +1276,20 @@ export const LandlordDashboard: React.FC = () => {
                           </p>
                         </div>
                       </div>
-                      <span className={`text-[9px] font-extrabold uppercase px-2 py-1 rounded-full ${
-                        isUnread
-                          ? "bg-amber-100 text-amber-800 border border-amber-200"
-                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                      }`}>
-                        {inquiry.status === "pending" ? "pending" : "responded"}
-                      </span>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <span className={`text-[9px] font-extrabold uppercase px-2 py-1 rounded-full ${
+                          isUnread
+                            ? "bg-amber-100 text-amber-800 border border-amber-200"
+                            : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        }`}>
+                          {inquiry.status === "pending" ? "pending" : "responded"}
+                        </span>
+                        {inquiry.property?.listing_model === "pay_per_lead" && !inquiry.is_locked && (
+                          <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[9px] font-extrabold uppercase px-2 py-1 rounded-full flex items-center gap-0.5 shadow-xs">
+                            ✅ Unlocked
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Row 2 */}
@@ -1345,8 +1536,255 @@ export const LandlordDashboard: React.FC = () => {
             </div>
 
           </div>
-        )
-      )}
+        )) : (
+          /* CREDITS & BOOSTS TAB UI (Part 2D) */
+          <div className="space-y-8">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-[#0A4D2E] to-stone-900 rounded-2xl p-6 md:p-8 text-white shadow-md flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center md:text-left">
+                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 rounded-full border border-emerald-500/30">
+                  PRO MONETIZATION DASHBOARD
+                </span>
+                <h2 className="text-xl md:text-2xl font-black tracking-tight">Credits & Boosts History</h2>
+                <p className="text-stone-300 text-xs md:text-sm max-w-xl leading-relaxed">
+                  Review your active visibility boosts, pay-per-lead transactions, and lead credits. Drive more premium tenant connections instantly.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto shrink-0">
+                <button
+                  onClick={() => {
+                    const ppleadProp = properties.find(p => p.listing_model === "pay_per_lead");
+                    setUnlockingInquiry({
+                      inquiryId: undefined,
+                      propertyId: ppleadProp?.id,
+                      propertyTitle: ppleadProp?.title || "Property",
+                      propertyType: ppleadProp?.type || "bedsitter",
+                      leadCredits: ppleadProp?.lead_credits || 0
+                    });
+                  }}
+                  className="flex-1 sm:flex-none min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition shadow-sm text-center"
+                >
+                  Buy Lead Credits
+                </button>
+                <a
+                  href="#listings"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveTab("listings");
+                  }}
+                  className="flex-1 sm:flex-none min-h-[44px] bg-white hover:bg-stone-50 text-stone-900 font-extrabold text-xs px-5 py-2.5 rounded-xl transition border border-stone-200 shadow-xs text-center flex items-center justify-center"
+                >
+                  Boost a Listing 🚀
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+              {/* Boosts History List */}
+              <div className="xl:col-span-2 space-y-6">
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 md:p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-stone-150 pb-3">
+                    <h3 className="font-sans font-black text-stone-900 text-base flex items-center gap-2">
+                      <span>⚡</span> Visibility Boost History
+                    </h3>
+                    <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-amber-200">
+                      {boostsList.length} Total Boosts
+                    </span>
+                  </div>
+
+                  {boostsList.length === 0 ? (
+                    <div className="py-12 text-center text-stone-400">
+                      <p className="text-2xl">🚀</p>
+                      <p className="text-xs font-bold uppercase tracking-wider mt-2">No listing boosts yet</p>
+                      <p className="text-[11px] max-w-xs mx-auto mt-1">
+                        Landlords who boost their listings get up to 10x more leads. Go to your properties list to boost.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-stone-100 text-stone-400 font-bold uppercase tracking-wider">
+                            <th className="py-2.5">Property</th>
+                            <th className="py-2.5">Tier</th>
+                            <th className="py-2.5">Price</th>
+                            <th className="py-2.5">Date</th>
+                            <th className="py-2.5">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                          {boostsList.map((boost) => {
+                            const daysLeft = getBoostDaysLeft(boost.expires_at);
+                            const isActive = daysLeft >= 0;
+                            return (
+                              <tr key={boost.id} className="hover:bg-stone-50/50 transition">
+                                <td className="py-3 font-bold text-stone-800">
+                                  {boost.property?.title || "Deleted Property"}
+                                </td>
+                                <td className="py-3">
+                                  <span className="bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded font-black uppercase text-[10px]">
+                                    {boost.boost_tier}
+                                  </span>
+                                </td>
+                                <td className="py-3 font-bold text-stone-700">
+                                  KSh {boost.amount_paid?.toLocaleString() || 0}
+                                </td>
+                                <td className="py-3 text-stone-500 font-semibold">
+                                  {new Date(boost.created_at).toLocaleDateString("en-KE")}
+                                </td>
+                                <td className="py-3">
+                                  {isActive ? (
+                                    <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200 animate-pulse">
+                                      ✓ Active ({daysLeft} days left)
+                                    </span>
+                                  ) : (
+                                    <span className="bg-stone-100 text-stone-500 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-stone-200">
+                                      Expired
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Lead Unlocks List */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 md:p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-stone-150 pb-3">
+                    <h3 className="font-sans font-black text-stone-900 text-base flex items-center gap-2">
+                      <span>🔓</span> Pay-Per-Lead Transaction History
+                    </h3>
+                    <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-blue-200">
+                      {unlocksList.length} Transactions
+                    </span>
+                  </div>
+
+                  {unlocksList.length === 0 ? (
+                    <div className="py-12 text-center text-stone-400">
+                      <p className="text-2xl">🔓</p>
+                      <p className="text-xs font-bold uppercase tracking-wider mt-2">No lead unlocks yet</p>
+                      <p className="text-[11px] max-w-xs mx-auto mt-1">
+                        Lead unlocks occur when you pay to unlock inquiries on Pay-Per-Lead properties or purchase bulk credit bundles.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-stone-100 text-stone-400 font-bold uppercase tracking-wider">
+                            <th className="py-2.5">Type / Property</th>
+                            <th className="py-2.5">Amount</th>
+                            <th className="py-2.5">Credits Added</th>
+                            <th className="py-2.5">Date</th>
+                            <th className="py-2.5">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                          {unlocksList.map((unlock) => {
+                            const isBundle = unlock.transaction_type === "bundle_purchase" || !unlock.inquiry_id;
+                            return (
+                              <tr key={unlock.id} className="hover:bg-stone-50/50 transition">
+                                <td className="py-3 font-bold text-stone-800">
+                                  {isBundle ? (
+                                    <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-black text-[10px] mr-1.5 uppercase">
+                                      Bundle Purchase
+                                    </span>
+                                  ) : (
+                                    <span className="text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded font-black text-[10px] mr-1.5 uppercase">
+                                      Lead Unlock
+                                    </span>
+                                  )}
+                                  <span className="text-stone-600 font-medium">{unlock.property?.title || "Property"}</span>
+                                </td>
+                                <td className="py-3 font-black text-stone-800">
+                                  KSh {unlock.amount_paid?.toLocaleString() || 0}
+                                </td>
+                                <td className="py-3 font-bold text-stone-600">
+                                  {isBundle ? `+${unlock.credits_added || 0} credits` : "-1 credit"}
+                                </td>
+                                <td className="py-3 text-stone-500 font-semibold">
+                                  {new Date(unlock.created_at).toLocaleDateString("en-KE")}
+                                </td>
+                                <td className="py-3">
+                                  <span className="bg-emerald-100 text-emerald-800 font-extrabold text-[10px] px-2 py-0.5 rounded-full border border-emerald-200">
+                                    Confirmed
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sidebar Pricing reference & Support contact */}
+              <div className="space-y-6">
+                <div className="bg-stone-900 text-white rounded-2xl p-5 md:p-6 shadow-sm border border-stone-800 space-y-4">
+                  <h4 className="font-sans font-black text-base flex items-center gap-1.5 text-amber-400">
+                    <span>💰</span> NestList Pricing Guide
+                  </h4>
+                  <p className="text-stone-300 text-[11px] leading-relaxed">
+                    All transactions are handled directly via premium automated **M-Pesa Express (STK Push)**. Our prices are fixed and round-numbers friendly.
+                  </p>
+
+                  <div className="space-y-3 pt-2 text-xs">
+                    <div className="border-b border-stone-800 pb-2">
+                      <p className="font-bold text-stone-200 uppercase tracking-wider text-[10px]">Boost Visibility Tiers:</p>
+                      <div className="grid grid-cols-2 mt-1 gap-1 text-stone-300">
+                        <div>3-Day Boost:</div>
+                        <div className="text-right font-bold text-white">KES 300</div>
+                        <div>7-Day Boost:</div>
+                        <div className="text-right font-bold text-white">KES 500</div>
+                        <div>14-Day Boost:</div>
+                        <div className="text-right font-bold text-white">KES 900</div>
+                        <div>30-Day Boost:</div>
+                        <div className="text-right font-bold text-white">KES 1,500</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-stone-200 uppercase tracking-wider text-[10px]">Pay-Per-Lead Options:</p>
+                      <div className="grid grid-cols-2 mt-1 gap-1 text-stone-300">
+                        <div>Single Lead Unlock:</div>
+                        <div className="text-right font-bold text-white">KES 50</div>
+                        <div>5-Lead Bundle:</div>
+                        <div className="text-right font-bold text-white">KES 200</div>
+                        <div>15-Lead Bundle:</div>
+                        <div className="text-right font-bold text-white">KES 500</div>
+                        <div>40-Lead Bundle:</div>
+                        <div className="text-right font-bold text-white">KES 1,000</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 md:p-6 space-y-3">
+                  <h4 className="font-sans font-extrabold text-[#0A4D2E] text-sm flex items-center gap-1.5">
+                    <span>📞</span> Need Help or Custom Packages?
+                  </h4>
+                  <p className="text-[#0A4D2E]/80 text-xs leading-relaxed font-medium">
+                    We offer specialized packages for agency networks, managers, and property firms listing over 50 properties.
+                  </p>
+                  <div className="space-y-1.5 pt-2 text-xs font-semibold text-stone-700">
+                    <p className="flex items-center gap-1.5">
+                      <span>📧</span> <a href="mailto:info@nestlist.com" className="hover:underline text-emerald-800 font-extrabold">info@nestlist.com</a>
+                    </p>
+                    <p className="flex items-center gap-1.5">
+                      <span>📞</span> <a href="tel:+254738244330" className="hover:underline text-emerald-800 font-extrabold">+254 738 244 330</a>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* CHANGE 5 — DELETE CONFIRMATION MODAL */}
       {deletePropertyId && (

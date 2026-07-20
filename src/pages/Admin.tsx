@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { BOOST_TIERS } from "../lib/constants";
 import { 
   Shield, Landmark, Users, Home, RefreshCw, Check, X, 
   Loader2, ArrowLeft, Calendar, Coins, MapPin, User, Mail, 
@@ -19,7 +20,7 @@ export const AdminPanel: React.FC = () => {
     }
   }, [profile]);
 
-  const [activeTab, setActiveTab] = useState<"payments" | "listings" | "users">("payments");
+  const [activeTab, setActiveTab] = useState<"payments" | "listings" | "users" | "boosts" | "unlocks">("payments");
   const [loading, setLoading] = useState(true);
 
   // States
@@ -27,10 +28,24 @@ export const AdminPanel: React.FC = () => {
   const [allListings, setAllListings] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [allBoosts, setAllBoosts] = useState<any[]>([]);
+  const [allUnlocks, setAllUnlocks] = useState<any[]>([]);
+  const [grantBoostLoading, setGrantBoostLoading] = useState(false);
+  const [grantCreditsLoading, setGrantCreditsLoading] = useState(false);
+  const [boostSearch, setBoostSearch] = useState("");
+  const [unlockSearch, setUnlockSearch] = useState("");
   const [activityLimit, setActivityLimit] = useState(5);
   const [lastUpdated, setLastUpdated] = useState<string>("");
   const [isPulling, setIsPulling] = useState(false);
   const [listingsError, setListingsError] = useState<string | null>(null);
+
+  // Form States for Granting Visibility Boosts & Credits
+  const [boostFormPropertyId, setBoostFormPropertyId] = useState("");
+  const [boostFormTier, setBoostFormTier] = useState("3day");
+  const [boostFormAmount, setBoostFormAmount] = useState(50);
+  const [creditsFormPropertyId, setCreditsFormPropertyId] = useState("");
+  const [creditsFormAmount, setCreditsFormAmount] = useState(5);
+  const [creditsFormPaid, setCreditsFormPaid] = useState(0);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -255,6 +270,40 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const fetchBoosts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('listing_boosts')
+        .select(`
+          *,
+          property:properties(title, type, location),
+          landlord:profiles(full_name, phone)
+        `)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setAllBoosts(data || []);
+    } catch (err: any) {
+      console.error("Failed to fetch boosts:", err);
+    }
+  };
+
+  const fetchUnlocks = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_unlocks')
+        .select(`
+          *,
+          property:properties(title, type, location),
+          landlord:profiles(full_name, phone)
+        `)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setAllUnlocks(data || []);
+    } catch (err: any) {
+      console.error("Failed to fetch unlocks:", err);
+    }
+  };
+
   const fetchRecentActivity = async () => {
     try {
       const [
@@ -445,7 +494,9 @@ export const AdminPanel: React.FC = () => {
       fetchPendingPayments(),
       fetchAllListings(),
       fetchAllUsers(),
-      fetchRecentActivity()
+      fetchRecentActivity(),
+      fetchBoosts(),
+      fetchUnlocks()
     ]);
 
     setLoading(false);
@@ -658,6 +709,137 @@ export const AdminPanel: React.FC = () => {
       showToast("Error updating user status: " + err.message, "error");
     } finally {
       setUserActionLoading(null);
+    }
+  };
+
+  const handleCancelBoost = async (boost: any) => {
+    if (!window.confirm("Are you sure you want to cancel this boost?")) return;
+    try {
+      // Update property
+      const { error: propError } = await supabase
+        .from('properties')
+        .update({
+          is_boosted: false,
+          boost_tier: null,
+          boost_expires_at: null,
+          boost_badge: null
+        })
+        .eq('id', boost.property_id);
+      if (propError) throw propError;
+
+      // Update boost history
+      const { error: boostError } = await supabase
+        .from('listing_boosts')
+        .update({
+          expires_at: new Date().toISOString(),
+          status: 'expired'
+        })
+        .eq('id', boost.id);
+      if (boostError) throw boostError;
+
+      showToast("⚡ Boost cancelled successfully!", "success");
+      await refreshData();
+    } catch (err: any) {
+      console.error("Failed to cancel boost:", err);
+      showToast("Failed to cancel boost: " + err.message, "error");
+    }
+  };
+
+  const handleGrantBoost = async (propertyId: string, tier: string, customAmount: number) => {
+    if (!propertyId || !tier) {
+      showToast("Please select a property and boost tier", "error");
+      return;
+    }
+    setGrantBoostLoading(true);
+    try {
+      const prop = allListings.find(p => p.id === propertyId);
+      if (!prop) throw new Error("Property not found");
+
+      const daysMap: Record<string, number> = { '3day': 3, '7day': 7, '14day': 14, '30day': 30 };
+      const badgeMap: Record<string, string> = { '3day': '⚡ Featured', '7day': '⭐ Featured', '14day': '🔥 Hot Property', '30day': '👑 Premium' };
+      const days = daysMap[tier] || 3;
+      const badge = badgeMap[tier] || '⚡ Featured';
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+      // 1. Update property
+      const { error: propError } = await supabase
+        .from('properties')
+        .update({
+          is_boosted: true,
+          boost_tier: tier,
+          boost_expires_at: expiresAt,
+          boost_badge: badge
+        })
+        .eq('id', propertyId);
+      if (propError) throw propError;
+
+      // 2. Insert into listing_boosts
+      const { error: boostError } = await supabase
+        .from('listing_boosts')
+        .insert({
+          property_id: propertyId,
+          landlord_id: prop.landlord_id,
+          boost_tier: tier,
+          amount_paid: customAmount,
+          status: 'confirmed',
+          mpesa_code: 'ADMIN_GRANTED',
+          starts_at: new Date().toISOString(),
+          expires_at: expiresAt
+        });
+      if (boostError) throw boostError;
+
+      showToast("⚡ Boost granted successfully!", "success");
+      await refreshData();
+    } catch (err: any) {
+      console.error("Failed to grant boost:", err);
+      showToast("Failed to grant boost: " + err.message, "error");
+    } finally {
+      setGrantBoostLoading(false);
+    }
+  };
+
+  const handleGrantCredits = async (propertyId: string, credits: number, customAmount: number) => {
+    if (!propertyId || !credits) {
+      showToast("Please select a property and number of credits", "error");
+      return;
+    }
+    setGrantCreditsLoading(true);
+    try {
+      const prop = allListings.find(p => p.id === propertyId);
+      if (!prop) throw new Error("Property not found");
+
+      const newCredits = (prop.lead_credits || 0) + credits;
+
+      // 1. Update property
+      const { error: propError } = await supabase
+        .from('properties')
+        .update({
+          lead_credits: newCredits
+        })
+        .eq('id', propertyId);
+      if (propError) throw propError;
+
+      // 2. Insert into lead_unlocks (as bundle purchase)
+      const { error: unlockError } = await supabase
+        .from('lead_unlocks')
+        .insert({
+          property_id: propertyId,
+          landlord_id: prop.landlord_id,
+          amount_paid: customAmount,
+          bundle_size: credits,
+          status: 'confirmed',
+          mpesa_code: 'ADMIN_GRANTED',
+          unlocked_at: new Date().toISOString()
+        });
+      if (unlockError) throw unlockError;
+
+      showToast(`🔓 Successfully added ${credits} credits!`, "success");
+      await refreshData();
+    } catch (err: any) {
+      console.error("Failed to grant credits:", err);
+      showToast("Failed to grant credits: " + err.message, "error");
+    } finally {
+      setGrantCreditsLoading(false);
     }
   };
 
@@ -1324,6 +1506,38 @@ export const AdminPanel: React.FC = () => {
               {stats.totalUsers}
             </span>
           </button>
+
+          <button
+            onClick={() => setActiveTab("boosts")}
+            className={`flex-1 py-2.5 px-1.5 rounded-lg font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === "boosts" 
+                ? "bg-[#F0FDF4] text-[#1E6B4A] shadow-[0_1px_4px_rgba(30,107,74,0.1)] border border-emerald-100" 
+                : "bg-transparent text-[#4B5E54] hover:bg-[#FAFAF8]"
+            }`}
+            id="tab-btn-all-boosts"
+          >
+            <span className="text-base shrink-0">⚡</span>
+            <span>Boosts</span>
+            <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 leading-none font-bold">
+              {allBoosts.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("unlocks")}
+            className={`flex-1 py-2.5 px-1.5 rounded-lg font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === "unlocks" 
+                ? "bg-[#F0FDF4] text-[#1E6B4A] shadow-[0_1px_4px_rgba(30,107,74,0.1)] border border-emerald-100" 
+                : "bg-transparent text-[#4B5E54] hover:bg-[#FAFAF8]"
+            }`}
+            id="tab-btn-all-unlocks"
+          >
+            <span className="text-base shrink-0">🔓</span>
+            <span>Unlocks</span>
+            <span className="text-[10px] bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 leading-none font-bold">
+              {allUnlocks.length}
+            </span>
+          </button>
         </div>
 
         {/* MAIN TAB RENDER SPACE */}
@@ -1864,6 +2078,359 @@ export const AdminPanel: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB 4: VISIBILITY BOOSTS */}
+            {activeTab === "boosts" && (
+              <div className="animate-fade-in" id="visibility-boosts-tab">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Form Column */}
+                  <div className="lg:col-span-1 space-y-4">
+                    <div className="bg-white border border-[#E2EAE6] rounded-2xl p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-xl">⚡</span>
+                        <h3 className="font-bold text-stone-900 text-base">Grant Complimenary/Promo Boost</h3>
+                      </div>
+                      <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+                        Manually apply a visibility boost to any property listing. This will immediately push the listing to the top of browse queries.
+                      </p>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-stone-600 mb-1.5 uppercase">Select Property</label>
+                          <select
+                            value={boostFormPropertyId}
+                            onChange={(e) => {
+                              setBoostFormPropertyId(e.target.value);
+                            }}
+                            style={{ border: '1.5px solid #E2EAE6' }}
+                            className="w-full p-2.5 rounded-xl text-sm bg-white focus:border-[#1E6B4A] outline-none"
+                          >
+                            <option value="">-- Choose Listing --</option>
+                            {allListings.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.title} ({p.profiles?.full_name || 'N/A'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-stone-600 mb-1.5 uppercase">Boost Tier</label>
+                          <select
+                            value={boostFormTier}
+                            onChange={(e) => {
+                              setBoostFormTier(e.target.value);
+                              const tPrice = BOOST_TIERS[e.target.value as keyof typeof BOOST_TIERS]?.price || 0;
+                              setBoostFormAmount(tPrice);
+                            }}
+                            style={{ border: '1.5px solid #E2EAE6' }}
+                            className="w-full p-2.5 rounded-xl text-sm bg-white focus:border-[#1E6B4A] outline-none"
+                          >
+                            <option value="3day">3 Days Boost (KES 50)</option>
+                            <option value="7day">7 Days Boost (KES 100)</option>
+                            <option value="14day">14 Days Boost (KES 200)</option>
+                            <option value="30day">30 Days Premium (KES 350)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-stone-600 mb-1.5 uppercase">Custom Price Recorded (KES)</label>
+                          <input
+                            type="number"
+                            value={boostFormAmount}
+                            onChange={(e) => setBoostFormAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                            style={{ border: '1.5px solid #E2EAE6' }}
+                            className="w-full p-2.5 rounded-xl text-sm focus:border-[#1E6B4A] outline-none"
+                            placeholder="0 for complimentary"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleGrantBoost(boostFormPropertyId, boostFormTier, boostFormAmount)}
+                          disabled={grantBoostLoading || !boostFormPropertyId}
+                          className="w-full py-3 bg-[#1E6B4A] hover:bg-[#154D34] disabled:opacity-50 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          {grantBoostLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                          <span>Grant Boost Status</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List/Table Column */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="bg-white border border-[#E2EAE6] rounded-2xl p-5 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h3 className="font-extrabold text-stone-900 text-base">Boost History & Tracker</h3>
+                        
+                        <div className="relative max-w-xs w-full">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                          <input
+                            type="text"
+                            placeholder="Filter by title, landlord, code..."
+                            value={boostSearch}
+                            onChange={(e) => setBoostSearch(e.target.value)}
+                            style={{ border: '1px solid #E2EAE6' }}
+                            className="w-full p-2 pl-8 pr-4 rounded-lg text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {allBoosts.length === 0 ? (
+                        <div className="text-center py-12 text-stone-400 text-sm">
+                          No boosts have been registered on the platform yet.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead className="bg-stone-50 border-b border-stone-200 text-stone-400 font-bold uppercase">
+                              <tr>
+                                <th className="p-3">Listing</th>
+                                <th className="p-3">Landlord</th>
+                                <th className="p-3">Tier</th>
+                                <th className="p-3">Amount</th>
+                                <th className="p-3">Expires At</th>
+                                <th className="p-3 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-stone-150 text-stone-700">
+                              {allBoosts
+                                .filter(b => {
+                                  if (!boostSearch) return true;
+                                  const term = boostSearch.toLowerCase();
+                                  return (
+                                    b.property?.title?.toLowerCase().includes(term) ||
+                                    b.landlord?.full_name?.toLowerCase().includes(term) ||
+                                    b.mpesa_code?.toLowerCase().includes(term) ||
+                                    b.boost_tier?.toLowerCase().includes(term)
+                                  );
+                                })
+                                .map((b) => {
+                                  const isExpired = new Date(b.expires_at).getTime() < Date.now();
+                                  return (
+                                    <tr key={b.id} className="hover:bg-stone-50/50">
+                                      <td className="p-3 font-semibold text-stone-900">
+                                        {b.property?.title || "Deleted Property"}
+                                        <div className="text-[10px] text-stone-400 font-normal">
+                                          {b.property?.location}
+                                        </div>
+                                      </td>
+                                      <td className="p-3">
+                                        <div className="font-semibold text-stone-800">{b.landlord?.full_name || "N/A"}</div>
+                                        <div className="text-[10px] text-stone-400 font-mono">{b.landlord?.phone || "N/A"}</div>
+                                      </td>
+                                      <td className="p-3">
+                                        <span className={`inline-block font-extrabold px-2 py-0.5 rounded text-[10px] uppercase ${
+                                          b.boost_tier === '30day' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                                          b.boost_tier === '14day' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                                          'bg-stone-100 text-stone-700 border border-stone-200'
+                                        }`}>
+                                          {b.boost_tier}
+                                        </span>
+                                      </td>
+                                      <td className="p-3 font-mono font-bold text-stone-900">
+                                        KES {b.amount_paid}
+                                        <div className="text-[9px] text-stone-400 uppercase font-bold">{b.mpesa_code || "N/A"}</div>
+                                      </td>
+                                      <td className="p-3">
+                                        <div className={isExpired ? "text-stone-400 line-through font-mono" : "text-[#1E6B4A] font-mono font-semibold"}>
+                                          {new Date(b.expires_at).toLocaleDateString("en-KE")}
+                                        </div>
+                                        <div className="text-[10px]">
+                                          {isExpired ? "Expired" : "Active"}
+                                        </div>
+                                      </td>
+                                      <td className="p-3 text-right">
+                                        {!isExpired && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCancelBoost(b)}
+                                            className="text-red-600 hover:text-red-900 font-bold hover:underline cursor-pointer"
+                                          >
+                                            Cancel
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: LEAD UNLOCKS & CREDITS */}
+            {activeTab === "unlocks" && (
+              <div className="animate-fade-in" id="lead-unlocks-tab">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Form Column */}
+                  <div className="lg:col-span-1 space-y-4">
+                    <div className="bg-white border border-[#E2EAE6] rounded-2xl p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-xl">🔓</span>
+                        <h3 className="font-bold text-stone-900 text-base">Grant Lead Credits</h3>
+                      </div>
+                      <p className="text-stone-500 text-xs mb-4 leading-relaxed">
+                        Directly add lead inquiry credits to any Pay-Per-Lead property listing. Landlords will be able to unlock tenant inquiries instantly.
+                      </p>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-xs font-bold text-stone-600 mb-1.5 uppercase">Select Pay-Per-Lead Property</label>
+                          <select
+                            value={creditsFormPropertyId}
+                            onChange={(e) => setCreditsFormPropertyId(e.target.value)}
+                            style={{ border: '1.5px solid #E2EAE6' }}
+                            className="w-full p-2.5 rounded-xl text-sm bg-white focus:border-[#1E6B4A] outline-none"
+                          >
+                            <option value="">-- Choose PPL Listing --</option>
+                            {allListings
+                              .filter(p => p.listing_model === 'pay_per_lead')
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.title} ({p.profiles?.full_name || 'N/A'}) - Credits: {p.lead_credits || 0}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-stone-600 mb-1.5 uppercase">Number of Credits to Add</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={creditsFormAmount}
+                            onChange={(e) => setCreditsFormAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                            style={{ border: '1.5px solid #E2EAE6' }}
+                            className="w-full p-2.5 rounded-xl text-sm focus:border-[#1E6B4A] outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-stone-600 mb-1.5 uppercase">Custom Price Recorded (KES)</label>
+                          <input
+                            type="number"
+                            value={creditsFormPaid}
+                            onChange={(e) => setCreditsFormPaid(Math.max(0, parseInt(e.target.value) || 0))}
+                            style={{ border: '1.5px solid #E2EAE6' }}
+                            className="w-full p-2.5 rounded-xl text-sm focus:border-[#1E6B4A] outline-none"
+                            placeholder="0 for complimentary"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleGrantCredits(creditsFormPropertyId, creditsFormAmount, creditsFormPaid)}
+                          disabled={grantCreditsLoading || !creditsFormPropertyId}
+                          className="w-full py-3 bg-[#1E6B4A] hover:bg-[#154D34] disabled:opacity-50 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          {grantCreditsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                          <span>Grant Lead Credits</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List/Table Column */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="bg-white border border-[#E2EAE6] rounded-2xl p-5 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h3 className="font-extrabold text-stone-900 text-base">Unlocks & Credit Bundles History</h3>
+                        
+                        <div className="relative max-w-xs w-full">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-stone-400" />
+                          <input
+                            type="text"
+                            placeholder="Filter by title, landlord, code..."
+                            value={unlockSearch}
+                            onChange={(e) => setUnlockSearch(e.target.value)}
+                            style={{ border: '1px solid #E2EAE6' }}
+                            className="w-full p-2 pl-8 pr-4 rounded-lg text-xs outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {allUnlocks.length === 0 ? (
+                        <div className="text-center py-12 text-stone-400 text-sm">
+                          No lead unlocks or credit purchases recorded on the platform yet.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead className="bg-stone-50 border-b border-stone-200 text-stone-400 font-bold uppercase">
+                              <tr>
+                                <th className="p-3">Listing</th>
+                                <th className="p-3">Landlord</th>
+                                <th className="p-3">Transaction Details</th>
+                                <th className="p-3">Amount</th>
+                                <th className="p-3">Date</th>
+                                <th className="p-3 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-stone-150 text-stone-700">
+                              {allUnlocks
+                                .filter(u => {
+                                  if (!unlockSearch) return true;
+                                  const term = unlockSearch.toLowerCase();
+                                  return (
+                                    u.property?.title?.toLowerCase().includes(term) ||
+                                    u.landlord?.full_name?.toLowerCase().includes(term) ||
+                                    u.mpesa_code?.toLowerCase().includes(term) ||
+                                    (u.inquiry_id ? 'single unlock' : 'bundle purchase').includes(term)
+                                  );
+                                })
+                                .map((u) => (
+                                  <tr key={u.id} className="hover:bg-stone-50/50">
+                                    <td className="p-3 font-semibold text-stone-900">
+                                      {u.property?.title || "Deleted Property"}
+                                      <div className="text-[10px] text-stone-400 font-normal">
+                                        {u.property?.location}
+                                      </div>
+                                    </td>
+                                    <td className="p-3">
+                                      <div className="font-semibold text-stone-800">{u.landlord?.full_name || "N/A"}</div>
+                                      <div className="text-[10px] text-stone-400 font-mono">{u.landlord?.phone || "N/A"}</div>
+                                    </td>
+                                    <td className="p-3">
+                                      {u.inquiry_id ? (
+                                        <span className="inline-block bg-blue-50 text-blue-700 border border-blue-150 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                          🔓 Single Lead Unlock
+                                        </span>
+                                      ) : (
+                                        <span className="inline-block bg-emerald-50 text-emerald-700 border border-emerald-150 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                          💳 +{u.bundle_size || 1} Credit Bundle
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-3 font-mono font-bold text-stone-900">
+                                      KES {u.amount_paid}
+                                      <div className="text-[9px] text-stone-400 uppercase font-bold">{u.mpesa_code || "N/A"}</div>
+                                    </td>
+                                    <td className="p-3 text-stone-400 font-mono">
+                                      {new Date(u.created_at).toLocaleDateString("en-KE", { dateStyle: "medium" })}
+                                    </td>
+                                    <td className="p-3 text-right">
+                                      <span className="inline-block bg-green-100 text-green-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border border-green-200">
+                                        {u.status || 'confirmed'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

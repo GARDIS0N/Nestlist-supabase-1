@@ -140,37 +140,59 @@ export const Pricing: React.FC = () => {
             <div className="space-y-1">
               <h3 className="text-base sm:text-lg font-black text-stone-900 flex items-center gap-1.5">
                 <Key className="h-4 w-4 text-emerald-700" />
-                Landlord Lead Credit Bundles
+                Landlord Lead Credit Bundles (5 Unlocks)
               </h3>
               <p className="text-xs sm:text-sm text-stone-500 font-medium">
-                Save on tenant acquisition by purchasing unlock bundles in advance through your dashboard.
+                Save on tenant acquisition by purchasing unlock bundles in advance through your landlord dashboard.
               </p>
             </div>
             <div className="px-3 py-1 bg-amber-150 border border-amber-200 text-amber-800 text-[10px] font-black rounded-full uppercase tracking-wider self-start sm:self-center">
-              🔥 20% Savings
+              🔥 Up to 20% Savings
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white border border-stone-200 rounded-xl p-4 flex justify-between items-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white border border-stone-200 rounded-xl p-4 flex justify-between items-center shadow-xs">
               <div>
-                <p className="text-sm font-bold text-stone-800">Single Rooms & Bedsitters</p>
-                <p className="text-xs text-stone-400">Normal price: KES 50 each</p>
+                <p className="text-xs font-bold text-stone-800">Single Rooms</p>
+                <p className="text-[10px] text-stone-400">Regular: KES 25 each</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-extrabold text-stone-900">KES 200</p>
-                <p className="text-[10px] font-bold text-emerald-700">5 Credits Bundle</p>
+                <p className="text-sm font-extrabold text-stone-900">KES 100</p>
+                <p className="text-[9px] font-black text-emerald-700 uppercase">Save 20%</p>
               </div>
             </div>
 
-            <div className="bg-white border border-stone-200 rounded-xl p-4 flex justify-between items-center">
+            <div className="bg-white border border-stone-200 rounded-xl p-4 flex justify-between items-center shadow-xs">
               <div>
-                <p className="text-sm font-bold text-stone-800">1+ Bedroom Apartments</p>
-                <p className="text-xs text-stone-400">Normal price: KES 100 each</p>
+                <p className="text-xs font-bold text-stone-800">Bedsitters</p>
+                <p className="text-[10px] text-stone-400">Regular: KES 50 each</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-extrabold text-stone-900">KES 400</p>
-                <p className="text-[10px] font-bold text-emerald-700">5 Credits Bundle</p>
+                <p className="text-sm font-extrabold text-stone-900">KES 200</p>
+                <p className="text-[9px] font-black text-emerald-700 uppercase">Save 20%</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-stone-200 rounded-xl p-4 flex justify-between items-center shadow-xs">
+              <div>
+                <p className="text-xs font-bold text-stone-800">1 Bedroom</p>
+                <p className="text-[10px] text-stone-400">Regular: KES 120 each</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-extrabold text-stone-900">KES 500</p>
+                <p className="text-[9px] font-black text-emerald-700 uppercase">Save 17%</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-stone-200 rounded-xl p-4 flex justify-between items-center shadow-xs">
+              <div>
+                <p className="text-xs font-bold text-stone-800">2 Bedroom</p>
+                <p className="text-[10px] text-stone-400">Regular: KES 160 each</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-extrabold text-stone-900">KES 700</p>
+                <p className="text-[9px] font-black text-emerald-700 uppercase">Save 13%</p>
               </div>
             </div>
           </div>
@@ -190,13 +212,13 @@ export const Pricing: React.FC = () => {
             {/* Tier 1: 3-day */}
             <div className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col justify-between shadow-xs">
               <div className="space-y-2">
-                <div className="text-xs font-bold text-stone-500">3 Days</div>
+                <div className="text-xs font-bold text-stone-500 font-mono">3 Days</div>
                 <h4 className="text-sm font-bold text-stone-900">⚡ Featured Boost</h4>
                 <p className="text-[11px] text-stone-400">Perfect for quick rentals</p>
               </div>
               <div className="mt-4 pt-3 border-t border-stone-100 flex items-baseline justify-between">
                 <span className="text-xs font-semibold text-stone-500">Price:</span>
-                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 150</span>
+                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 50</span>
               </div>
             </div>
 
@@ -206,39 +228,39 @@ export const Pricing: React.FC = () => {
                 Popular
               </div>
               <div className="space-y-2">
-                <div className="text-xs font-bold text-stone-500">7 Days</div>
+                <div className="text-xs font-bold text-stone-500 font-mono">7 Days</div>
                 <h4 className="text-sm font-bold text-stone-900">⭐ Popular Boost</h4>
                 <p className="text-[11px] text-stone-400">Weekly featured placement</p>
               </div>
               <div className="mt-4 pt-3 border-t border-stone-100 flex items-baseline justify-between">
                 <span className="text-xs font-semibold text-stone-500">Price:</span>
-                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 299</span>
+                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 100</span>
               </div>
             </div>
 
             {/* Tier 3: 14-day */}
             <div className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col justify-between shadow-xs">
               <div className="space-y-2">
-                <div className="text-xs font-bold text-stone-500">14 Days</div>
+                <div className="text-xs font-bold text-stone-500 font-mono">14 Days</div>
                 <h4 className="text-sm font-bold text-stone-900">🔥 Hot Property</h4>
                 <p className="text-[11px] text-stone-400">Mid-term premium focus</p>
               </div>
               <div className="mt-4 pt-3 border-t border-stone-100 flex items-baseline justify-between">
                 <span className="text-xs font-semibold text-stone-500">Price:</span>
-                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 549</span>
+                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 200</span>
               </div>
             </div>
 
             {/* Tier 4: 30-day */}
             <div className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col justify-between shadow-xs">
               <div className="space-y-2">
-                <div className="text-xs font-bold text-stone-500">30 Days</div>
+                <div className="text-xs font-bold text-stone-500 font-mono">30 Days</div>
                 <h4 className="text-sm font-bold text-stone-900">👑 Premium Plus</h4>
                 <p className="text-[11px] text-stone-400">Monthly premier slot</p>
               </div>
               <div className="mt-4 pt-3 border-t border-stone-100 flex items-baseline justify-between">
                 <span className="text-xs font-semibold text-stone-500">Price:</span>
-                <span className="text-base font-extrabold text-emerald-700 font-mono">KES 999</span>
+                <span className="text-base font-extrabold text-[#7C3AED] font-mono">KES 350</span>
               </div>
             </div>
 
