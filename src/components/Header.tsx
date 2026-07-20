@@ -2,7 +2,7 @@ import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
-import { Home, Heart, Bell, LayoutDashboard, Shield, LogOut, User, Menu, X } from "lucide-react";
+import { Home, Heart, Bell, LayoutDashboard, Shield, LogOut, User, Menu, X, Coins } from "lucide-react";
 
 export const Header: React.FC = () => {
   const { profile } = useAuth();
@@ -42,7 +42,7 @@ export const Header: React.FC = () => {
   }, [profile, location.pathname]);
 
   // Check if current user has the admin privilege
-  const isAdmin = profile?.role === "admin" || profile?.email === "gardisonkirui11@gmail.com" || profile?.id === "42eca9a0-c070-4898-b830-46c3247ea71d" || profile?.id === "admin-1";
+  const isAdmin = profile?.role === "admin" || profile?.email === "gardisonkirui11@gmail.com" || profile?.email === "info@nestlist.com" || profile?.id === "42eca9a0-c070-4898-b830-46c3247ea71d" || profile?.id === "admin-1";
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -87,6 +87,11 @@ export const Header: React.FC = () => {
               <Link to="/" className={linkStyle("/")}>
                 <Home className="h-4 w-4" />
                 <span>Browse</span>
+              </Link>
+
+              <Link to="/pricing" className={linkStyle("/pricing")}>
+                <Coins className="h-4 w-4" />
+                <span>Pricing</span>
               </Link>
 
               {profile.role === "tenant" && (
@@ -313,6 +318,15 @@ export const Header: React.FC = () => {
 
             {/* Dividers & Common sections */}
             <div className="border-t border-[#F3F4F6] my-2"></div>
+
+            <Link
+              to="/pricing"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center space-x-2.5 h-[48px] px-4 rounded-xl text-sm font-semibold text-stone-700 hover:bg-stone-50 transition-all"
+            >
+              <Coins className="h-5 w-5 text-stone-500" />
+              <span>Pricing Packages</span>
+            </Link>
 
             <Link
               to="/"

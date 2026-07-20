@@ -38,6 +38,10 @@ export const AdminPanel: React.FC = () => {
     activeListings: 0,
     pendingPayments: 0,
     totalUsers: 0,
+    monthlyRevenue: 0,
+    listingRevenue: 0,
+    boostRevenue: 0,
+    leadRevenue: 0,
   });
 
   // Toast message state
@@ -378,38 +382,62 @@ export const AdminPanel: React.FC = () => {
     setListingsError(null);
 
     try {
-      const [
-        { count: activeCount },
-        { count: pendingCount },
-        { count: usersCount },
-        { data: payments },
-      ] = await Promise.all([
-        supabase.from('properties')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true),
-        supabase.from('listing_payments')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending'),
-        supabase.from('profiles')
-          .select('*', { count: 'exact', head: true }),
-        supabase.from('listing_payments')
-          .select('amount')
-          .eq('status', 'confirmed'),
-      ]);
-
-      const revenue = payments?.reduce(
-        (sum, p) => sum + (p.amount || 0), 0
-      ) || 0;
+      const statsRes = await fetch('/api/admin/stats');
+      const statsData = await statsRes.json();
+      if (!statsRes.ok) throw new Error(statsData.error || "Failed to load stats");
 
       setStats({
-        totalRevenue: revenue,
-        activeListings: activeCount || 0,
-        pendingPayments: pendingCount || 0,
-        totalUsers: usersCount || 0,
+        totalRevenue: statsData.totalRevenue || 0,
+        activeListings: statsData.activeListings || 0,
+        pendingPayments: statsData.pendingPayments || 0,
+        totalUsers: statsData.totalUsers || 0,
+        monthlyRevenue: statsData.monthlyRevenue || 0,
+        listingRevenue: statsData.listingRevenue || 0,
+        boostRevenue: statsData.boostRevenue || 0,
+        leadRevenue: statsData.leadRevenue || 0,
       });
+
       setLastUpdated(new Date().toLocaleTimeString("en-KE", { hour: '2-digit', minute: '2-digit' }));
-    } catch (err) {
-      console.error("Failed to load statistics:", err);
+    } catch (err: any) {
+      console.error("Failed to load statistics via API, trying direct supabase fallback:", err);
+      try {
+        const [
+          { count: activeCount },
+          { count: pendingCount },
+          { count: usersCount },
+          { data: payments },
+        ] = await Promise.all([
+          supabase.from('properties')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_active', true),
+          supabase.from('listing_payments')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'pending'),
+          supabase.from('profiles')
+            .select('*', { count: 'exact', head: true }),
+          supabase.from('listing_payments')
+            .select('amount')
+            .eq('status', 'confirmed'),
+        ]);
+
+        const revenue = payments?.reduce(
+          (sum, p) => sum + (p.amount || 0), 0
+        ) || 0;
+
+        setStats({
+          totalRevenue: revenue,
+          activeListings: activeCount || 0,
+          pendingPayments: pendingCount || 0,
+          totalUsers: usersCount || 0,
+          monthlyRevenue: revenue,
+          listingRevenue: revenue,
+          boostRevenue: 0,
+          leadRevenue: 0,
+        });
+        setLastUpdated(new Date().toLocaleTimeString("en-KE", { hour: '2-digit', minute: '2-digit' }));
+      } catch (fallbackErr) {
+        console.error("Fallback statistics query failed:", fallbackErr);
+      }
     }
 
     // Refresh current selected view
@@ -1093,7 +1121,22 @@ export const AdminPanel: React.FC = () => {
               <p className="text-base sm:text-lg font-bold font-mono" style={{ color: '#1E6B4A' }}>
                 KES {stats.totalRevenue.toLocaleString()}
               </p>
-              <p className="text-[11px] text-stone-400 mt-0.5">All time</p>
+              <p className="text-[10px] text-stone-400 mt-0.5 mb-2.5">All time</p>
+              
+              <div className="border-t border-stone-100 pt-2 space-y-1 text-[11px]">
+                <div className="flex items-center justify-between text-stone-600 font-medium">
+                  <span>📌 Listings</span>
+                  <span className="font-mono font-semibold text-stone-900">KES {(stats.listingRevenue || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-stone-600 font-medium">
+                  <span>⚡ Boosts</span>
+                  <span className="font-mono font-semibold text-stone-900">KES {(stats.boostRevenue || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between text-stone-600 font-medium">
+                  <span>🔑 Unlocks</span>
+                  <span className="font-mono font-semibold text-stone-900">KES {(stats.leadRevenue || 0).toLocaleString()}</span>
+                </div>
+              </div>
             </div>
           </div>
 

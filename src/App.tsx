@@ -17,6 +17,7 @@ import { ListProperty } from "./pages/ListProperty";
 import { AdminPanel } from "./pages/Admin";
 import { Privacy } from "./pages/Privacy";
 import { Terms } from "./pages/Terms";
+import { Pricing } from "./pages/Pricing";
 import { Profile } from "./pages/Profile";
 import AuthCallback from "./pages/AuthCallback";
 import { DevConnectionBanner } from "./components/DevConnectionBanner";
@@ -151,6 +152,14 @@ export default function App() {
                 path="/terms"
                 element={
                   <Terms />
+                }
+              />
+
+              {/* Publicly Accessible Landlord Pricing Guide */}
+              <Route
+                path="/pricing"
+                element={
+                  <Pricing />
                 }
               />
 

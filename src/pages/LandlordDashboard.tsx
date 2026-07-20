@@ -4,6 +4,8 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { PhotoUpload } from "../components/PhotoUpload";
 import { PropertySkeleton } from "../components/PropertySkeleton";
+import BoostListing from "../components/BoostListing";
+import UnlockLead from "../components/UnlockLead";
 import { 
   LayoutDashboard, Plus, MessageSquare, Building2, Eye, Check, X, Loader2, 
   CheckCircle, Clock, AlertTriangle, Send, Share2, Edit, Trash2, Copy, 
@@ -47,6 +49,8 @@ export const LandlordDashboard: React.FC = () => {
   const [renewingProperty, setRenewingProperty] = useState<any | null>(null);
   const [replyingInquiry, setReplyingInquiry] = useState<any | null>(null);
   const [updatingPhotosProperty, setUpdatingPhotosProperty] = useState<any | null>(null);
+  const [boostingProperty, setBoostingProperty] = useState<any | null>(null);
+  const [unlockingInquiry, setUnlockingInquiry] = useState<any | null>(null);
 
   // Modal forms
   const [editTitle, setEditTitle] = useState("");
@@ -105,15 +109,11 @@ export const LandlordDashboard: React.FC = () => {
       const listingsList = propsData || [];
       setProperties(listingsList);
 
-      // 2. Fetch inquiries
-      const { data: inquiriesData, error: inqError } = await supabase
-        .from("inquiries")
-        .select("*, tenant:profiles!inquiries_tenant_id_fkey(full_name, phone), property:properties(title)")
-        .eq("landlord_id", profile.id)
-        .order("created_at", { ascending: false });
-
-      if (inqError) throw inqError;
-      const inqList = inquiriesData || [];
+      // 2. Fetch inquiries via secure API
+      const inqRes = await fetch(`/api/inquiries/landlord/${profile.id}`);
+      const inqData = await inqRes.json();
+      if (!inqRes.ok) throw new Error(inqData.error || "Failed to load inquiries");
+      const inqList = inqData.inquiries || [];
       setInquiries(inqList);
 
       // 3. Fetch fees paid
@@ -998,6 +998,21 @@ export const LandlordDashboard: React.FC = () => {
                         ✏️ Edit
                       </button>
 
+                      {/* Boost / Boosted Button */}
+                      {property.is_boosted ? (
+                        <div className="flex-1 min-w-[50px] min-h-[48px] inline-flex flex-col items-center justify-center px-1 border border-purple-200 bg-purple-50 text-purple-700 rounded-xl text-[10px] font-extrabold shadow-xs">
+                          <span>🔮 BOOSTED</span>
+                          <span className="text-[8px] opacity-75">Active</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setBoostingProperty(property)}
+                          className="flex-1 min-w-[50px] min-h-[48px] inline-flex items-center justify-center p-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-0.5"
+                        >
+                          <span>⚡ Boost</span>
+                        </button>
+                      )}
+
                       {/* Renew option if expired/expiring */}
                       {daysLeftObj.daysLeft <= 7 && (
                         <button
@@ -1046,7 +1061,8 @@ export const LandlordDashboard: React.FC = () => {
               {inquiries.map((inquiry) => {
                 const isSelected = selectedInquiryId === inquiry.id;
                 const isUnread = inquiry.status === "pending";
-                const initials = inquiry.tenant?.full_name?.charAt(0) || "T";
+                const tName = inquiry.tenant_name || inquiry.tenant?.full_name || "Tenant Lead";
+                const initials = tName.charAt(0) || "T";
 
                 return (
                   <div
@@ -1069,7 +1085,7 @@ export const LandlordDashboard: React.FC = () => {
                         </div>
                         <div>
                           <p className={`text-sm text-stone-800 ${isUnread ? "font-black" : "font-semibold"}`}>
-                            {inquiry.tenant?.full_name}
+                            {tName}
                           </p>
                           <p className="text-[10px] text-stone-400 font-bold">
                             {new Date(inquiry.created_at).toLocaleDateString("en-KE")} at {new Date(inquiry.created_at).toLocaleTimeString("en-KE", {hour: '2-digit', minute:'2-digit'})}
@@ -1098,34 +1114,78 @@ export const LandlordDashboard: React.FC = () => {
                     </p>
 
                     {/* Row 4 */}
-                    <div className="flex flex-col gap-0.5 text-[11px] text-stone-500 font-bold">
-                      <a href={`tel:${inquiry.tenant?.phone}`} className="hover:underline flex items-center space-x-1.5 text-stone-700">
-                        <span>📞 Phone: {inquiry.tenant?.phone}</span>
-                      </a>
-                    </div>
+                    {inquiry.is_locked ? (
+                      <div className="flex flex-col gap-2 p-2.5 bg-amber-50 rounded-lg border border-amber-200">
+                        <div className="flex items-center space-x-1.5 text-amber-800 text-xs font-bold">
+                          <span>🔒 Contact Details Locked</span>
+                        </div>
+                        <p className="text-[10px] text-amber-700 font-semibold leading-relaxed">
+                          This is a Pay-Per-Lead listing. Unlock this tenant contact for KES {inquiry.unlock_price || 50}.
+                        </p>
+                        <button
+                          onClick={() => {
+                            setUnlockingInquiry({
+                              inquiryId: inquiry.id,
+                              propertyId: inquiry.property_id,
+                              propertyTitle: inquiry.property?.title || "Property",
+                              propertyType: inquiry.property?.type || "bedsitter",
+                              leadCredits: inquiry.property?.lead_credits || 0
+                            });
+                          }}
+                          className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-md flex items-center justify-center gap-1 transition shadow-sm"
+                        >
+                          <span>🔑 Unlock Now</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-0.5 text-[11px] text-stone-500 font-bold">
+                        <a href={`tel:${inquiry.tenant_phone || inquiry.tenant?.phone}`} className="hover:underline flex items-center space-x-1.5 text-stone-700">
+                          <span>📞 Phone: {inquiry.tenant_phone || inquiry.tenant?.phone}</span>
+                        </a>
+                      </div>
+                    )}
 
                     {/* Row 5: Action buttons */}
                     <div className="flex items-center gap-2 pt-2 border-t border-stone-100">
-                      <button
-                        onClick={() => setReplyingInquiry(inquiry)}
-                        className="flex-1 min-h-[44px] bg-white border border-emerald-600 text-emerald-800 hover:bg-emerald-50 text-xs font-bold rounded-lg transition py-1 flex items-center justify-center gap-1 shadow-sm"
-                      >
-                        💬 Reply
-                      </button>
-                      
-                      <a
-                        href={`tel:${inquiry.tenant?.phone}`}
-                        className="flex-1 min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition py-1 flex items-center justify-center gap-1 shadow shadow-emerald-700/10"
-                      >
-                        📞 Call
-                      </a>
+                      {inquiry.is_locked ? (
+                        <button
+                          onClick={() => {
+                            setUnlockingInquiry({
+                              inquiryId: inquiry.id,
+                              propertyId: inquiry.property_id,
+                              propertyTitle: inquiry.property?.title || "Property",
+                              propertyType: inquiry.property?.type || "bedsitter",
+                              leadCredits: inquiry.property?.lead_credits || 0
+                            });
+                          }}
+                          className="w-full min-h-[44px] bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition py-1 flex items-center justify-center gap-1 shadow"
+                        >
+                          <span>🔑 Unlock to Call or Reply</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setReplyingInquiry(inquiry)}
+                            className="flex-1 min-h-[44px] bg-white border border-emerald-600 text-emerald-800 hover:bg-emerald-50 text-xs font-bold rounded-lg transition py-1 flex items-center justify-center gap-1 shadow-sm"
+                          >
+                            💬 Reply
+                          </button>
+                          
+                          <a
+                            href={`tel:${inquiry.tenant_phone || inquiry.tenant?.phone}`}
+                            className="flex-1 min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition py-1 flex items-center justify-center gap-1 shadow shadow-emerald-700/10"
+                          >
+                            📞 Call
+                          </a>
 
-                      <button
-                        onClick={() => handleUpdateInquiryStatus(inquiry.id, "closed")}
-                        className="flex-1 min-h-[44px] border border-stone-300 hover:bg-stone-50 text-stone-600 text-[10px] font-bold rounded-lg transition py-1"
-                      >
-                        Mark Resolved
-                      </button>
+                          <button
+                            onClick={() => handleUpdateInquiryStatus(inquiry.id, "closed")}
+                            className="flex-1 min-h-[44px] border border-stone-300 hover:bg-stone-50 text-stone-600 text-[10px] font-bold rounded-lg transition py-1"
+                          >
+                            Mark Resolved
+                          </button>
+                        </>
+                      )}
                     </div>
 
                     {/* Select for Live console */}
@@ -1145,16 +1205,51 @@ export const LandlordDashboard: React.FC = () => {
               {selectedInquiryId ? (
                 (() => {
                   const inquiry = inquiries.find(i => i.id === selectedInquiryId);
+                  if (!inquiry) return null;
+
+                  if (inquiry.is_locked) {
+                    return (
+                      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4 bg-stone-50 h-full">
+                        <div className="p-4 bg-amber-50 text-amber-600 rounded-full border border-amber-200">
+                          <ShieldAlert className="w-8 h-8" />
+                        </div>
+                        <div>
+                          <h4 className="text-base font-bold text-stone-900">Conversation Locked</h4>
+                          <p className="text-xs text-stone-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                            This listing is configured on the pay-per-lead model. To chat with this tenant or view their full message, unlock the lead.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setUnlockingInquiry({
+                              inquiryId: inquiry.id,
+                              propertyId: inquiry.property_id,
+                              propertyTitle: inquiry.property?.title || "Property",
+                              propertyType: inquiry.property?.type || "bedsitter",
+                              leadCredits: inquiry.property?.lead_credits || 0
+                            });
+                          }}
+                          className="py-2.5 px-6 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow transition"
+                        >
+                          🔑 Unlock Tenant Contact
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  const tenantName = inquiry.tenant_name || inquiry.tenant?.full_name || "Tenant";
+                  const tenantPhone = inquiry.tenant_phone || inquiry.tenant?.phone || "";
+
                   return (
                     <>
                       {/* Chat Header */}
                       <div className="bg-[#0A4D2E] text-white p-4 flex items-center justify-between">
                         <div>
-                          <h4 className="font-bold text-sm leading-tight">{inquiry?.tenant?.full_name}</h4>
-                          <p className="text-[10px] text-emerald-100 font-semibold">{inquiry?.property?.title}</p>
+                          <h4 className="font-bold text-sm leading-tight">{tenantName}</h4>
+                          <p className="text-[10px] text-emerald-100 font-semibold">{inquiry.property?.title}</p>
                         </div>
                         <div className="flex space-x-2">
-                          {inquiry?.status !== "closed" && (
+                          {inquiry.status !== "closed" && (
                             <button
                               onClick={() => handleUpdateInquiryStatus(selectedInquiryId, "closed")}
                               className="text-[10px] font-bold bg-white/10 hover:bg-white/20 text-white py-1 px-2.5 rounded-md border border-white/20"
@@ -1170,10 +1265,10 @@ export const LandlordDashboard: React.FC = () => {
                         {/* Initial Inquiry Box */}
                         <div className="flex flex-col space-y-1 max-w-[85%]">
                           <span className="text-[10px] text-stone-400 font-bold uppercase pl-1">
-                            {inquiry?.tenant?.full_name} ({inquiry?.tenant?.phone})
+                            {tenantName} ({tenantPhone})
                           </span>
                           <div className="bg-white border border-stone-200 p-3 rounded-xl rounded-tl-none shadow-sm text-xs sm:text-sm text-stone-800">
-                            {inquiry?.message}
+                            {inquiry.message}
                           </div>
                         </div>
 
@@ -1188,7 +1283,7 @@ export const LandlordDashboard: React.FC = () => {
                               }`}
                             >
                               <span className="text-[10px] text-stone-400 font-bold uppercase pr-1">
-                                {isMe ? "You" : inquiry?.tenant?.full_name}
+                                {isMe ? "You" : tenantName}
                               </span>
                               <div
                                 className={`p-3 rounded-xl shadow-sm text-xs sm:text-sm ${
@@ -1205,7 +1300,7 @@ export const LandlordDashboard: React.FC = () => {
                       </div>
 
                       {/* Reply Input Console */}
-                      {inquiry?.status === "closed" ? (
+                      {inquiry.status === "closed" ? (
                         <div className="p-4 bg-stone-100 text-center text-xs text-stone-500 font-semibold">
                           This inquiry is marked as CLOSED. Reopen by sending a reply below.
                         </div>
@@ -1214,7 +1309,7 @@ export const LandlordDashboard: React.FC = () => {
                       <form onSubmit={handleSendChatReply} className="border-t border-stone-200 p-3 flex gap-2">
                         <input
                           type="text"
-                          placeholder={`SMS reply to ${inquiry?.tenant?.full_name}...`}
+                          placeholder={`SMS reply to ${tenantName}...`}
                           value={newMessageText}
                           onChange={(e) => setNewMessageText(e.target.value)}
                           className="flex-1 border border-stone-300 rounded-xl px-4 py-2.5 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#1E6B4A]/20 focus:border-[#1E6B4A]"
@@ -1691,6 +1786,41 @@ export const LandlordDashboard: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* BOOST LISTING MODAL */}
+      {boostingProperty && (
+        <BoostListing
+          propertyId={boostingProperty.id}
+          landlordId={profile.id}
+          propertyTitle={boostingProperty.title}
+          currentPhone={profile.phone || ""}
+          onClose={() => setBoostingProperty(null)}
+          onSuccess={() => {
+            setBoostingProperty(null);
+            fetchDashboardData();
+            showToast("⚡ Property boosted successfully!", "success");
+          }}
+        />
+      )}
+
+      {/* UNLOCK LEAD MODAL */}
+      {unlockingInquiry && (
+        <UnlockLead
+          inquiryId={unlockingInquiry.inquiryId}
+          propertyId={unlockingInquiry.propertyId}
+          landlordId={profile.id}
+          propertyTitle={unlockingInquiry.propertyTitle}
+          propertyType={unlockingInquiry.propertyType}
+          leadCredits={unlockingInquiry.leadCredits}
+          currentPhone={profile.phone || ""}
+          onClose={() => setUnlockingInquiry(null)}
+          onSuccess={() => {
+            setUnlockingInquiry(null);
+            fetchDashboardData();
+            showToast("🔑 Lead unlocked successfully!", "success");
+          }}
+        />
       )}
 
     </div>

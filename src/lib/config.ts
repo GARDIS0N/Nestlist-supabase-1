@@ -8,7 +8,7 @@ export const CONFIG = {
   // Contact emails
   EMAIL_INFO: 'info@nestlist.com',
   EMAIL_SUPPORT: 'support@nestlist.com',
-  EMAIL_ADMIN_INTERNAL: 'gardisonkirui11@gmail.com',
+  EMAIL_ADMIN_INTERNAL: 'info@nestlist.com',
 
   // Phone
   PHONE: '+254715185037',

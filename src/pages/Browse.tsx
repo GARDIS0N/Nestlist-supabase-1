@@ -61,6 +61,17 @@ export const Browse: React.FC = () => {
 
   const ITEMS_PER_PAGE = 20;
 
+  const sortProperties = (list: any[]) => {
+    return [...list].sort((a, b) => {
+      const aBoost = a.is_boosted ? 1 : 0;
+      const bBoost = b.is_boosted ? 1 : 0;
+      if (aBoost !== bBoost) {
+        return bBoost - aBoost;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  };
+
   // Fetch properties
   const fetchProperties = async (pageNum: number = 0, isAppend: boolean = false) => {
     if (pageNum === 0) setLoading(true);
@@ -120,9 +131,9 @@ export const Browse: React.FC = () => {
       }
 
       if (isAppend) {
-        setProperties(prev => [...prev, ...filteredData]);
+        setProperties(prev => sortProperties([...prev, ...filteredData]));
       } else {
-        setProperties(filteredData);
+        setProperties(sortProperties(filteredData));
       }
 
       // Check if there are more items to fetch
@@ -175,9 +186,9 @@ export const Browse: React.FC = () => {
       const sliced = filteredData.slice(from, from + ITEMS_PER_PAGE);
 
       if (isAppend) {
-        setProperties(prev => [...prev, ...sliced]);
+        setProperties(prev => sortProperties([...prev, ...sliced]));
       } else {
-        setProperties(sliced);
+        setProperties(sortProperties(sliced));
       }
       setPageHasMore(from + sliced.length < filteredData.length);
     } finally {
@@ -517,13 +528,20 @@ export const Browse: React.FC = () => {
                       }}
                     />
 
-                    {/* Badge: Rent Type */}
-                    <span 
-                      style={{ backgroundColor: typeColors.bg, color: typeColors.text }} 
-                      className="absolute top-3 left-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm"
-                    >
-                      {getPropertyTypeLabel(property.type)}
-                    </span>
+                    {/* Badge: Rent Type and Boost */}
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 max-w-[70%]">
+                      <span 
+                        style={{ backgroundColor: typeColors.bg, color: typeColors.text }} 
+                        className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm"
+                      >
+                        {getPropertyTypeLabel(property.type)}
+                      </span>
+                      {property.is_boosted && (
+                        <span className="bg-[#D97706] text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm flex items-center space-x-1 animate-pulse">
+                          <span>⚡ Featured</span>
+                        </span>
+                      )}
+                    </div>
 
                     {/* Badge: Verification Status */}
                     <span className="absolute top-3 right-3 bg-primary-600 text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow-sm flex items-center space-x-1">

@@ -20,7 +20,7 @@ app.use(express.json());
 // CONSTANTS (exactly as specified)
 // =====================================================================
 const ADMIN_PHONE = '+254715185037';
-const ADMIN_EMAIL = 'gardisonkirui11@gmail.com';
+const ADMIN_EMAIL = 'info@nestlist.com';
 const MPESA_PAYBILL = '247247';
 const MPESA_ACCOUNT = '0715185037';
 const APP_URL = 'https://nestlist.com';
@@ -151,6 +151,8 @@ interface MockDb {
   saved_properties: any[];
   search_alerts: any[];
   sms_logs: any[];
+  listing_boosts: any[];
+  lead_unlocks: any[];
 }
 
 function getMockDb(): MockDb {
@@ -162,7 +164,9 @@ function getMockDb(): MockDb {
       inquiries: [],
       saved_properties: [],
       search_alerts: [],
-      sms_logs: []
+      sms_logs: [],
+      listing_boosts: [],
+      lead_unlocks: []
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2));
     return initialDb;
@@ -176,6 +180,8 @@ function getMockDb(): MockDb {
     if (!db.saved_properties) db.saved_properties = [];
     if (!db.search_alerts) db.search_alerts = [];
     if (!db.sms_logs) db.sms_logs = [];
+    if (!db.listing_boosts) db.listing_boosts = [];
+    if (!db.lead_unlocks) db.lead_unlocks = [];
     return db;
   } catch (err) {
     return {
@@ -286,7 +292,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
     });
 
     await transporter.sendMail({
-      from: '"NestList" <gardisonkirui11@gmail.com>',
+      from: '"NestList Support" <support@nestlist.com>',
       to,
       subject,
       html,
@@ -907,31 +913,30 @@ app.post('/api/mpesa/callback', async (req, res) => {
     const checkoutId = cb?.CheckoutRequestID;
     const resultCode = cb?.ResultCode;
 
-    console.log('M-Pesa callback:', JSON.stringify(cb));
+    console.log('M-Pesa callback received:', JSON.stringify(cb));
 
     if (!checkoutId) {
-      return res.json({
-        ResultCode: 0,
-        ResultDesc: 'Accepted'
-      });
+      return res.status(200).json({ ResultCode: 0, ResultDesc: 'Accepted' });
     }
+
+    const statusVal = resultCode === 1032 ? 'cancelled' : 'failed';
 
     if (resultCode === 0) {
       // PAYMENT SUCCESS
       const items = cb?.CallbackMetadata?.Item || [];
-      const getItem = (name: string) =>
-        items.find((i: any) => i.Name === name)?.Value;
+      const getItem = (name: string) => items.find((i: any) => i.Name === name)?.Value;
 
       const mpesaCode = getItem('MpesaReceiptNumber');
       const amountPaid = getItem('Amount');
       const payerPhone = getItem('PhoneNumber');
 
-      console.log(`✅ Payment confirmed! Code: ${mpesaCode}`);
+      console.log(`✅ Webhook confirmed success! Code: ${mpesaCode}`);
 
+      let processed = false;
+
+      // 1. Process standard listing payment
       let payment: any = null;
-
       if (useRealSupabase) {
-        // Update payment record
         const { data: updatedPayment } = await supabaseClient
           .from('listing_payments')
           .update({
@@ -944,22 +949,9 @@ app.post('/api/mpesa/callback', async (req, res) => {
           })
           .eq('mpesa_checkout_request_id', checkoutId)
           .select()
-          .single();
+          .maybeSingle();
         payment = updatedPayment;
-
-        // Activate listing
-        if (payment?.property_id) {
-          await supabaseClient
-            .from('properties')
-            .update({
-              is_active: true,
-              payment_status: 'verified',
-              expires_at: new Date(
-                Date.now() + 30 * 24 * 60 * 60 * 1000
-              ).toISOString(),
-            })
-            .eq('id', payment.property_id);
-        }
+        if (payment) processed = true;
       } else {
         const db = getMockDb();
         const pIndex = db.listing_payments.findIndex(pay => pay.mpesa_checkout_request_id === checkoutId);
@@ -974,25 +966,32 @@ app.post('/api/mpesa/callback', async (req, res) => {
             verified_by: 'stk_auto',
           };
           payment = db.listing_payments[pIndex];
-
           const prop = db.properties.find(p => p.id === payment.property_id);
           if (prop) {
             prop.is_active = true;
             prop.payment_status = 'verified';
-            prop.expires_at = new Date(
-              Date.now() + 30 * 24 * 60 * 60 * 1000
-            ).toISOString();
+            prop.expires_at = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
           }
           saveMockDb(db);
+          processed = true;
         }
       }
 
-      // Activate listing details & send notifications
-      if (payment?.property_id) {
-        console.log(`🏠 Listing ${payment.property_id} activated`);
+      if (processed && payment) {
+        if (useRealSupabase && payment.property_id) {
+          await supabaseClient
+            .from('properties')
+            .update({
+              is_active: true,
+              payment_status: 'verified',
+              expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            })
+            .eq('id', payment.property_id);
+        }
+
+        console.log(`🏠 Listing ${payment.property_id} activated via STK`);
 
         let landlordProfile: any = null;
-
         if (payment.landlord_id) {
           if (useRealSupabase) {
             const { data: profile } = await supabaseClient
@@ -1007,7 +1006,6 @@ app.post('/api/mpesa/callback', async (req, res) => {
             landlordProfile = profile || { full_name: 'Landlord', phone: String(payerPhone || ''), email: '' };
           }
 
-          // SMS to landlord
           if (landlordProfile?.phone) {
             await sendSMS(
               landlordProfile.phone,
@@ -1016,7 +1014,6 @@ app.post('/api/mpesa/callback', async (req, res) => {
             );
           }
 
-          // Email to landlord
           if (landlordProfile?.email) {
             await sendEmail(
               landlordProfile.email,
@@ -1032,17 +1029,12 @@ app.post('/api/mpesa/callback', async (req, res) => {
                   month: 'long',
                   year: 'numeric'
                 })}</p>
-                <p>
-                  <a href="https://nestlist.com/dashboard">
-                    View My Dashboard
-                  </a>
-                </p>
+                <p><a href="https://nestlist.com/dashboard">View My Dashboard</a></p>
                 <p>The NestList Team</p>
               `
             );
           }
 
-          // SMS to admin
           await sendSMS(
             ADMIN_PHONE,
             `NestList: New STK listing activated! Landlord: ${landlordProfile?.full_name}. Code: ${mpesaCode}. Amount: KES ${amountPaid}`,
@@ -1051,29 +1043,199 @@ app.post('/api/mpesa/callback', async (req, res) => {
         }
       }
 
+      // 2. Process listing boost
+      if (!processed) {
+        let boost: any = null;
+        if (useRealSupabase) {
+          const { data: updatedBoost } = await supabaseClient
+            .from('listing_boosts')
+            .update({
+              status: 'active',
+              mpesa_code: mpesaCode,
+              starts_at: new Date().toISOString()
+            })
+            .eq('mpesa_checkout_request_id', checkoutId)
+            .select('*, property:properties(title)')
+            .maybeSingle();
+
+          if (updatedBoost) {
+            boost = updatedBoost;
+            processed = true;
+            const durationDays = boost.boost_tier === '3day' ? 3 : boost.boost_tier === '7day' ? 7 : boost.boost_tier === '14day' ? 14 : boost.boost_tier === '30day' ? 30 : 7;
+            const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+            const badgeText = boost.boost_tier === '3day' ? '⚡ Featured' : boost.boost_tier === '7day' ? '⭐ Featured' : boost.boost_tier === '14day' ? '🔥 Hot Property' : '👑 Premium';
+
+            await supabaseClient.from('listing_boosts').update({ expires_at: expiresAt }).eq('id', boost.id);
+
+            await supabaseClient.from('properties').update({
+              is_boosted: true,
+              boost_tier: boost.boost_tier,
+              boost_expires_at: expiresAt,
+              boost_badge: badgeText
+            }).eq('id', boost.property_id);
+
+            const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', boost.landlord_id).single();
+            if (profile?.phone) {
+              await sendSMS(
+                profile.phone,
+                `NestList: 🚀 Your listing '${boost.property?.title}' is now BOOSTED! It appears at the top of search results for ${durationDays} days. nestlist.com`,
+                'boost_activated'
+              );
+            }
+          }
+        } else {
+          const db = getMockDb();
+          const bIndex = db.listing_boosts.findIndex(b => b.mpesa_checkout_request_id === checkoutId);
+          if (bIndex !== -1) {
+            boost = db.listing_boosts[bIndex];
+            boost.status = 'active';
+            boost.mpesa_code = mpesaCode;
+            const durationDays = boost.boost_tier === '3day' ? 3 : boost.boost_tier === '7day' ? 7 : boost.boost_tier === '14day' ? 14 : boost.boost_tier === '30day' ? 30 : 7;
+            const startsAt = new Date().toISOString();
+            const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+            const badgeText = boost.boost_tier === '3day' ? '⚡ Featured' : boost.boost_tier === '7day' ? '⭐ Featured' : boost.boost_tier === '14day' ? '🔥 Hot Property' : '👑 Premium';
+
+            boost.starts_at = startsAt;
+            boost.expires_at = expiresAt;
+
+            const prop = db.properties.find(p => p.id === boost.property_id);
+            if (prop) {
+              prop.is_boosted = true;
+              prop.boost_tier = boost.boost_tier;
+              prop.boost_expires_at = expiresAt;
+              prop.boost_badge = badgeText;
+            }
+
+            const landlord = db.profiles.find(p => p.id === boost.landlord_id);
+            if (landlord?.phone) {
+              await sendSMS(
+                landlord.phone,
+                `NestList: 🚀 Your listing '${prop?.title || "Property"}' is now BOOSTED! It appears at the top of search results for ${durationDays} days. nestlist.com`,
+                'boost_activated'
+              );
+            }
+            saveMockDb(db);
+            processed = true;
+          }
+        }
+      }
+
+      // 3. Process lead unlocks / bundles
+      if (!processed) {
+        let unlock: any = null;
+        if (useRealSupabase) {
+          const { data: updatedUnlock } = await supabaseClient
+            .from('lead_unlocks')
+            .update({
+              status: 'confirmed',
+              mpesa_code: mpesaCode,
+              unlocked_at: new Date().toISOString()
+            })
+            .eq('mpesa_checkout_request_id', checkoutId)
+            .select('*, property:properties(title, lead_credits)')
+            .maybeSingle();
+
+          if (updatedUnlock) {
+            unlock = updatedUnlock;
+            processed = true;
+
+            if (unlock.bundle_size === 5) {
+              const currentCredits = unlock.property?.lead_credits || 0;
+              const newBalance = currentCredits + 5;
+              await supabaseClient.from('properties').update({ lead_credits: newBalance }).eq('id', unlock.property_id);
+
+              const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', unlock.landlord_id).single();
+              if (profile?.phone) {
+                await sendSMS(
+                  profile.phone,
+                  `NestList: ✅ 5 lead credits added to '${unlock.property?.title}'. Credits: ${newBalance}. nestlist.com`,
+                  'bundle_purchased'
+                );
+              }
+            } else {
+              if (unlock.inquiry_id) {
+                await supabaseClient.from('inquiries').update({ is_locked: false }).eq('id', unlock.inquiry_id);
+              }
+
+              const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', unlock.landlord_id).single();
+              if (profile?.phone) {
+                await sendSMS(
+                  profile.phone,
+                  `NestList: 🔓 Lead unlocked! View tenant contact at nestlist.com/dashboard`,
+                  'lead_unlocked'
+                );
+              }
+            }
+          }
+        } else {
+          const db = getMockDb();
+          const uIndex = db.lead_unlocks.findIndex(u => u.mpesa_checkout_request_id === checkoutId);
+          if (uIndex !== -1) {
+            unlock = db.lead_unlocks[uIndex];
+            unlock.status = 'confirmed';
+            unlock.mpesa_code = mpesaCode;
+            unlock.unlocked_at = new Date().toISOString();
+
+            const prop = db.properties.find(p => p.id === unlock.property_id);
+            const landlord = db.profiles.find(p => p.id === unlock.landlord_id);
+
+            if (unlock.bundle_size === 5) {
+              const currentCredits = prop?.lead_credits || 0;
+              const newBalance = currentCredits + 5;
+              if (prop) prop.lead_credits = newBalance;
+
+              if (landlord?.phone) {
+                await sendSMS(
+                  landlord.phone,
+                  `NestList: ✅ 5 lead credits added to '${prop?.title || "Property"}'. Credits: ${newBalance}. nestlist.com`,
+                  'bundle_purchased'
+                );
+              }
+            } else {
+              if (unlock.inquiry_id) {
+                const inq = db.inquiries.find(i => i.id === unlock.inquiry_id);
+                if (inq) inq.is_locked = false;
+              }
+
+              if (landlord?.phone) {
+                await sendSMS(
+                  landlord.phone,
+                  `NestList: 🔓 Lead unlocked! View tenant contact at nestlist.com/dashboard`,
+                  'lead_unlocked'
+                );
+              }
+            }
+            saveMockDb(db);
+            processed = true;
+          }
+        }
+      }
+
     } else {
       // PAYMENT FAILED OR CANCELLED
       const reason = cb?.ResultDesc || 'Payment was not completed';
       console.log(`❌ Payment failed: ${reason}`);
 
-      const statusVal = resultCode === 1032 ? 'cancelled' : 'failed';
-
       if (useRealSupabase) {
-        await supabaseClient
-          .from('listing_payments')
-          .update({
-            status: statusVal,
-            failure_reason: reason,
-          })
-          .eq('mpesa_checkout_request_id', checkoutId);
+        await supabaseClient.from('listing_payments').update({ status: statusVal, failure_reason: reason }).eq('mpesa_checkout_request_id', checkoutId);
+        await supabaseClient.from('listing_boosts').update({ status: 'cancelled' }).eq('mpesa_checkout_request_id', checkoutId);
+        await supabaseClient.from('lead_unlocks').update({ status: 'failed' }).eq('mpesa_checkout_request_id', checkoutId);
       } else {
         const db = getMockDb();
         const pIndex = db.listing_payments.findIndex(pay => pay.mpesa_checkout_request_id === checkoutId);
         if (pIndex !== -1) {
           db.listing_payments[pIndex].status = statusVal;
           db.listing_payments[pIndex].failure_reason = reason;
-          saveMockDb(db);
         }
+        const bIndex = db.listing_boosts.findIndex(b => b.mpesa_checkout_request_id === checkoutId);
+        if (bIndex !== -1) {
+          db.listing_boosts[bIndex].status = 'cancelled';
+        }
+        const uIndex = db.lead_unlocks.findIndex(u => u.mpesa_checkout_request_id === checkoutId);
+        if (uIndex !== -1) {
+          db.lead_unlocks[uIndex].status = 'failed';
+        }
+        saveMockDb(db);
       }
     }
 
@@ -1442,6 +1604,8 @@ app.get('/api/admin/stats', async (req, res) => {
       const { data: listings } = await supabaseClient.from('properties').select('*');
       const { data: payments } = await supabaseClient.from('listing_payments').select('*');
       const { data: users } = await supabaseClient.from('profiles').select('*');
+      const { data: boosts } = await supabaseClient.from('listing_boosts').select('*');
+      const { data: unlocks } = await supabaseClient.from('lead_unlocks').select('*');
 
       const totalListings = listings?.length || 0;
       const activeListings = listings?.filter((l: any) => l.is_active).length || 0;
@@ -1449,7 +1613,15 @@ app.get('/api/admin/stats', async (req, res) => {
       const totalUsers = users?.length || 0;
 
       const confirmedPayments = payments?.filter((p: any) => p.status === 'confirmed') || [];
-      const totalRevenue = confirmedPayments.reduce((acc: number, cur: any) => acc + (cur.amount_paid || cur.amount || 0), 0);
+      const listingRevenue = confirmedPayments.reduce((acc: number, cur: any) => acc + (cur.amount_paid || cur.amount || 0), 0);
+
+      const confirmedBoosts = boosts?.filter((b: any) => b.status === 'active' || b.status === 'expired') || [];
+      const boostRevenue = confirmedBoosts.reduce((acc: number, cur: any) => acc + (cur.amount_paid || 0), 0);
+
+      const confirmedUnlocks = unlocks?.filter((u: any) => u.status === 'confirmed') || [];
+      const leadRevenue = confirmedUnlocks.reduce((acc: number, cur: any) => acc + (cur.amount_paid || 0), 0);
+
+      const totalRevenue = listingRevenue + boostRevenue + leadRevenue;
 
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1473,6 +1645,9 @@ app.get('/api/admin/stats', async (req, res) => {
         totalUsers,
         totalRevenue,
         monthlyRevenue,
+        listingRevenue,
+        boostRevenue,
+        leadRevenue,
         recentPayments,
         listingsByType,
         listingsByCounty
@@ -1488,7 +1663,15 @@ app.get('/api/admin/stats', async (req, res) => {
     const totalUsers = db.profiles.length;
 
     const confirmedPayments = db.listing_payments.filter(p => p.status === 'confirmed');
-    const totalRevenue = confirmedPayments.reduce((acc, p) => acc + (p.amount_paid || p.amount), 0);
+    const listingRevenue = confirmedPayments.reduce((acc, p) => acc + (p.amount_paid || p.amount), 0);
+
+    const confirmedBoosts = db.listing_boosts.filter(b => b.status === 'active' || b.status === 'expired');
+    const boostRevenue = confirmedBoosts.reduce((acc, b) => acc + (b.amount_paid || 0), 0);
+
+    const confirmedUnlocks = db.lead_unlocks.filter(u => u.status === 'confirmed');
+    const leadRevenue = confirmedUnlocks.reduce((acc, u) => acc + (u.amount_paid || 0), 0);
+
+    const totalRevenue = listingRevenue + boostRevenue + leadRevenue;
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1512,6 +1695,9 @@ app.get('/api/admin/stats', async (req, res) => {
       totalUsers,
       totalRevenue,
       monthlyRevenue,
+      listingRevenue,
+      boostRevenue,
+      leadRevenue,
       recentPayments,
       listingsByType,
       listingsByCounty
@@ -1674,6 +1860,17 @@ app.post('/api/admin/users/:id/restore', async (req, res) => {
 
 // ── INQUIRIES ENDPOINTS ──────────────────────────────────────────────
 
+const LEAD_PRICES: Record<string, number> = {
+  single_room: 25,
+  bedsitter:   50,
+  studio:      60,
+  '1br':       120,
+  '2br':       160,
+  '3br':       220,
+  '4br':       260,
+  '5br_plus':  300,
+};
+
 // POST /api/inquiries
 app.post('/api/inquiries', async (req, res) => {
   const { propertyId, landlordId, message, tenantName, tenantPhone, tenantEmail, tenantId } = req.body;
@@ -1683,12 +1880,18 @@ app.post('/api/inquiries', async (req, res) => {
   }
 
   let propertyTitle = 'property';
+  let isLocked = false;
+  let unlockPrice = null;
 
   if (useRealSupabase) {
     try {
-      // Get title
-      const { data: prop } = await supabaseClient.from('properties').select('title').eq('id', propertyId).single();
-      if (prop) propertyTitle = prop.title;
+      // Get property details
+      const { data: prop } = await supabaseClient.from('properties').select('title, type, listing_model').eq('id', propertyId).single();
+      if (prop) {
+        propertyTitle = prop.title;
+        isLocked = prop.listing_model === 'pay_per_lead';
+        unlockPrice = isLocked ? (LEAD_PRICES[prop.type] || 50) : null;
+      }
 
       await supabaseClient.from('inquiries').insert({
         property_id: propertyId,
@@ -1698,7 +1901,9 @@ app.post('/api/inquiries', async (req, res) => {
         tenant_name: tenantName,
         tenant_phone: tenantPhone,
         tenant_email: tenantEmail || null,
-        status: 'pending'
+        status: 'pending',
+        is_locked: isLocked,
+        unlock_price: unlockPrice
       });
 
       // Update count on properties
@@ -1714,6 +1919,8 @@ app.post('/api/inquiries', async (req, res) => {
     if (prop) {
       propertyTitle = prop.title;
       prop.inquiry_count = (prop.inquiry_count || 0) + 1;
+      isLocked = prop.listing_model === 'pay_per_lead';
+      unlockPrice = isLocked ? (LEAD_PRICES[prop.type] || 50) : null;
     }
 
     const inquiry = {
@@ -1726,6 +1933,8 @@ app.post('/api/inquiries', async (req, res) => {
       tenant_phone: tenantPhone,
       tenant_email: tenantEmail || null,
       status: 'pending',
+      is_locked: isLocked,
+      unlock_price: unlockPrice,
       created_at: new Date().toISOString()
     };
 
@@ -1745,7 +1954,9 @@ app.post('/api/inquiries', async (req, res) => {
   }
 
   if (landlordPhone) {
-    const inqMsg = `NestList: ${tenantName} is interested in your property '${propertyTitle}'. Phone: ${tenantPhone}. Login to reply: ${APP_URL}/dashboard`;
+    const inqMsg = isLocked
+      ? `NestList: 🔒 New inquiry for '${propertyTitle}'! Unlock the tenant's contact for KES ${unlockPrice}. nestlist.com/dashboard`
+      : `NestList: ${tenantName} is interested in your property '${propertyTitle}'. Phone: ${tenantPhone}. Login to reply: ${APP_URL}/dashboard`;
     await sendSMS(landlordPhone, inqMsg, 'inquiry_received');
   }
 
@@ -1765,7 +1976,22 @@ app.get('/api/inquiries/landlord/:landlordId', async (req, res) => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return res.json({ success: true, inquiries: data });
+
+      // Mask details for locked inquiries securely
+      const mapped = (data || []).map((i: any) => {
+        if (i.is_locked) {
+          return {
+            ...i,
+            tenant_name: "●●●●● ●●●●●",
+            tenant_phone: "+254 ●●● ●●● ●●●",
+            tenant_email: "●●●@●●●.●●●",
+            message: i.message ? i.message.slice(0, 20) + "..." : "I am interested in..."
+          };
+        }
+        return i;
+      });
+
+      return res.json({ success: true, inquiries: mapped });
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -1774,12 +2000,22 @@ app.get('/api/inquiries/landlord/:landlordId', async (req, res) => {
     const filtered = db.inquiries.filter(i => i.landlord_id === landlordId);
     const mapped = filtered.map(i => {
       const property = db.properties.find(p => p.id === i.property_id);
+      if (i.is_locked) {
+        return {
+          ...i,
+          property,
+          tenant_name: "●●●●● ●●●●●",
+          tenant_phone: "+254 ●●● ●●● ●●●",
+          tenant_email: "●●●@●●●.●●●",
+          message: i.message ? i.message.slice(0, 20) + "..." : "I am interested in..."
+        };
+      }
       return {
         ...i,
         property
       };
     });
-    return res.json({ success: true, inquiries: mapped });
+    return res.json({ success: true, inquiries: mapped.reverse() });
   }
 });
 
@@ -2027,6 +2263,652 @@ app.post('/api/saved', async (req, res) => {
   }
 });
 
+// ── MONETIZATION ENDPOINTS (BOOSTS & LEADS) ───────────────────────────
+
+// POST /api/boost/pay
+app.post('/api/boost/pay', async (req, res) => {
+  const { propertyId, landlordId, boostTier, amount, paymentMethod, mpesaCode, phone } = req.body;
+
+  if (!propertyId || !landlordId || !boostTier || !amount || !paymentMethod) {
+    return res.status(400).json({ error: "Missing required fields for boost" });
+  }
+
+  const id = `bst-${Date.now()}`;
+
+  if (paymentMethod === 'stk_push') {
+    if (!phone) return res.status(400).json({ error: "Phone number required for STK push" });
+    try {
+      const token = await getMpesaToken();
+      const ts = mpesaTimestamp();
+      const pwd = mpesaPassword(ts);
+      const tel = formatPhone(phone);
+
+      const stkRes = await axios.post(
+        `${MPESA_BASE}/mpesa/stkpush/v1/processrequest`,
+        {
+          BusinessShortCode: MPESA_SHORTCODE,
+          Password: pwd,
+          Timestamp: ts,
+          TransactionType: 'CustomerPayBillOnline',
+          Amount: Math.ceil(amount),
+          PartyA: tel,
+          PartyB: MPESA_SHORTCODE,
+          PhoneNumber: tel,
+          CallBackURL: CALLBACK_URL,
+          AccountReference: 'BOOST-' + propertyId.slice(0, 8).toUpperCase(),
+          TransactionDesc: `NestList Boost: ${boostTier}`,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const d = stkRes.data;
+      if (d.ResponseCode !== '0') {
+        throw new Error(d.ResponseDescription || d.errorMessage || 'STK Push failed');
+      }
+
+      if (useRealSupabase) {
+        await supabaseClient.from('listing_boosts').insert({
+          property_id: propertyId,
+          landlord_id: landlordId,
+          boost_tier: boostTier,
+          amount_paid: amount,
+          status: 'pending',
+          mpesa_checkout_request_id: d.CheckoutRequestID,
+          payment_method: 'stk_push'
+        });
+      } else {
+        const db = getMockDb();
+        db.listing_boosts.push({
+          id,
+          property_id: propertyId,
+          landlord_id: landlordId,
+          boost_tier: boostTier,
+          amount_paid: amount,
+          status: 'pending',
+          mpesa_checkout_request_id: d.CheckoutRequestID,
+          payment_method: 'stk_push',
+          created_at: new Date().toISOString()
+        });
+        saveMockDb(db);
+      }
+
+      return res.json({ success: true, checkoutId: d.CheckoutRequestID, boostId: id, message: "STK Push sent!" });
+    } catch (err: any) {
+      console.error('Boost STK Push error:', err.response?.data || err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    // Manual payment
+    if (useRealSupabase) {
+      try {
+        const { data, error } = await supabaseClient.from('listing_boosts').insert({
+          property_id: propertyId,
+          landlord_id: landlordId,
+          boost_tier: boostTier,
+          amount_paid: amount,
+          status: 'pending',
+          mpesa_code: mpesaCode || null,
+          payment_method: 'manual'
+        }).select().single();
+        if (error) throw error;
+        return res.json({ success: true, boostId: data.id });
+      } catch (err: any) {
+        return res.status(500).json({ error: err.message });
+      }
+    } else {
+      const db = getMockDb();
+      db.listing_boosts.push({
+        id,
+        property_id: propertyId,
+        landlord_id: landlordId,
+        boost_tier: boostTier,
+        amount_paid: amount,
+        status: 'pending',
+        mpesa_code: mpesaCode || null,
+        payment_method: 'manual',
+        created_at: new Date().toISOString()
+      });
+      saveMockDb(db);
+      return res.json({ success: true, boostId: id });
+    }
+  }
+});
+
+// POST /api/boost/:id/confirm
+app.post('/api/boost/:id/confirm', async (req, res) => {
+  const { id } = req.params;
+
+  if (useRealSupabase) {
+    try {
+      const { data: boost, error: bErr } = await supabaseClient
+        .from('listing_boosts')
+        .select('*, property:properties(title)')
+        .eq('id', id)
+        .single();
+      if (bErr || !boost) throw new Error("Boost not found");
+
+      const durationDays = boost.boost_tier === '3day' ? 3 : boost.boost_tier === '7day' ? 7 : boost.boost_tier === '14day' ? 14 : boost.boost_tier === '30day' ? 30 : 7;
+      const startsAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+      const badgeText = boost.boost_tier === '3day' ? '⚡ Featured' : boost.boost_tier === '7day' ? '⭐ Featured' : boost.boost_tier === '14day' ? '🔥 Hot Property' : '👑 Premium';
+
+      await supabaseClient.from('listing_boosts').update({
+        status: 'active',
+        starts_at: startsAt,
+        expires_at: expiresAt
+      }).eq('id', id);
+
+      await supabaseClient.from('properties').update({
+        is_boosted: true,
+        boost_tier: boost.boost_tier,
+        boost_expires_at: expiresAt,
+        boost_badge: badgeText
+      }).eq('id', boost.property_id);
+
+      // Fetch landlord phone to notify
+      const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', boost.landlord_id).single();
+      if (profile?.phone) {
+        await sendSMS(
+          profile.phone,
+          `NestList: 🚀 Your listing '${boost.property?.title}' is now BOOSTED! It appears at the top of search results for ${durationDays} days. nestlist.com`,
+          'boost_activated'
+        );
+      }
+
+      return res.json({ success: true, message: "Boost activated successfully" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const idx = db.listing_boosts.findIndex(b => b.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Boost not found" });
+
+    const boost = db.listing_boosts[idx];
+    const durationDays = boost.boost_tier === '3day' ? 3 : boost.boost_tier === '7day' ? 7 : boost.boost_tier === '14day' ? 14 : boost.boost_tier === '30day' ? 30 : 7;
+    const startsAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+    const badgeText = boost.boost_tier === '3day' ? '⚡ Featured' : boost.boost_tier === '7day' ? '⭐ Featured' : boost.boost_tier === '14day' ? '🔥 Hot Property' : '👑 Premium';
+
+    boost.status = 'active';
+    boost.starts_at = startsAt;
+    boost.expires_at = expiresAt;
+
+    const prop = db.properties.find(p => p.id === boost.property_id);
+    if (prop) {
+      prop.is_boosted = true;
+      prop.boost_tier = boost.boost_tier;
+      prop.boost_expires_at = expiresAt;
+      prop.boost_badge = badgeText;
+    }
+
+    const landlord = db.profiles.find(p => p.id === boost.landlord_id);
+    if (landlord?.phone) {
+      await sendSMS(
+        landlord.phone,
+        `NestList: 🚀 Your listing '${prop?.title || "Property"}' is now BOOSTED! It appears at the top of search results for ${durationDays} days. nestlist.com`,
+        'boost_activated'
+      );
+    }
+
+    saveMockDb(db);
+    return res.json({ success: true, message: "Boost activated successfully" });
+  }
+});
+
+// POST /api/boost/:id/reject
+app.post('/api/boost/:id/reject', async (req, res) => {
+  const { id } = req.params;
+  if (useRealSupabase) {
+    try {
+      await supabaseClient.from('listing_boosts').update({ status: 'cancelled' }).eq('id', id);
+      return res.json({ success: true, message: "Boost rejected" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const b = db.listing_boosts.find(b => b.id === id);
+    if (b) b.status = 'cancelled';
+    saveMockDb(db);
+    return res.json({ success: true, message: "Boost rejected" });
+  }
+});
+
+// GET /api/boost/status
+app.get('/api/boost/status', async (req, res) => {
+  const { boostId } = req.query;
+  if (!boostId) return res.status(400).json({ error: "Missing boostId" });
+
+  if (useRealSupabase) {
+    try {
+      const { data, error } = await supabaseClient.from('listing_boosts').select('*').eq('id', boostId).single();
+      if (error) throw error;
+      return res.json({ success: true, status: data.status, expiresAt: data.expires_at });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const boost = db.listing_boosts.find(b => b.id === boostId);
+    if (!boost) return res.status(404).json({ error: "Boost not found" });
+    return res.json({ success: true, status: boost.status, expiresAt: boost.expires_at });
+  }
+});
+
+// POST /api/leads/unlock
+app.post('/api/leads/unlock', async (req, res) => {
+  const { inquiryId, propertyId, landlordId, amount, paymentMethod, mpesaCode, bundleSize, phone } = req.body;
+
+  if (!propertyId || !landlordId || !paymentMethod) {
+    return res.status(400).json({ error: "Missing required fields for unlock" });
+  }
+
+  const id = `unl-${Date.now()}`;
+  const isBundle = bundleSize === 5;
+
+  if (paymentMethod === 'credit') {
+    // Deduct credit
+    if (useRealSupabase) {
+      try {
+        const { data: prop, error: pErr } = await supabaseClient.from('properties').select('lead_credits, title').eq('id', propertyId).single();
+        if (pErr || !prop) throw new Error("Property not found");
+
+        if ((prop.lead_credits || 0) < 1) {
+          return res.status(400).json({ error: "Insufficient lead credits available." });
+        }
+
+        const newCredits = prop.lead_credits - 1;
+        await supabaseClient.from('properties').update({ lead_credits: newCredits }).eq('id', propertyId);
+
+        // Update inquiry
+        if (inquiryId) {
+          await supabaseClient.from('inquiries').update({ is_locked: false }).eq('id', inquiryId);
+        }
+
+        // Create confirmed unlock record
+        await supabaseClient.from('lead_unlocks').insert({
+          property_id: propertyId,
+          landlord_id: landlordId,
+          inquiry_id: inquiryId || null,
+          amount_paid: 0,
+          status: 'confirmed',
+          payment_method: 'credit',
+          unlocked_at: new Date().toISOString()
+        });
+
+        // Send SMS confirmation
+        const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', landlordId).single();
+        if (profile?.phone) {
+          await sendSMS(
+            profile.phone,
+            `NestList: 🔓 Lead unlocked! View tenant contact at nestlist.com/dashboard`,
+            'lead_unlocked'
+          );
+        }
+
+        // Return newly unmasked inquiry
+        let inquiryData = null;
+        if (inquiryId) {
+          const { data: inq } = await supabaseClient.from('inquiries').select('*').eq('id', inquiryId).single();
+          inquiryData = inq;
+        }
+
+        return res.json({ success: true, message: "Lead unlocked with credits", inquiry: inquiryData });
+      } catch (err: any) {
+        return res.status(500).json({ error: err.message });
+      }
+    } else {
+      const db = getMockDb();
+      const propIdx = db.properties.findIndex(p => p.id === propertyId);
+      if (propIdx === -1) return res.status(404).json({ error: "Property not found" });
+
+      const prop = db.properties[propIdx];
+      if ((prop.lead_credits || 0) < 1) {
+        return res.status(400).json({ error: "Insufficient lead credits available." });
+      }
+
+      prop.lead_credits = prop.lead_credits - 1;
+
+      if (inquiryId) {
+        const inq = db.inquiries.find(i => i.id === inquiryId);
+        if (inq) inq.is_locked = false;
+      }
+
+      db.lead_unlocks.push({
+        id,
+        property_id: propertyId,
+        landlord_id: landlordId,
+        inquiry_id: inquiryId || null,
+        amount_paid: 0,
+        status: 'confirmed',
+        payment_method: 'credit',
+        unlocked_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      });
+
+      const landlord = db.profiles.find(p => p.id === landlordId);
+      if (landlord?.phone) {
+        await sendSMS(
+          landlord.phone,
+          `NestList: 🔓 Lead unlocked! View tenant contact at nestlist.com/dashboard`,
+          'lead_unlocked'
+        );
+      }
+
+      saveMockDb(db);
+      const inquiryData = inquiryId ? db.inquiries.find(i => i.id === inquiryId) : null;
+      return res.json({ success: true, message: "Lead unlocked with credits", inquiry: inquiryData });
+    }
+  } else if (paymentMethod === 'stk_push') {
+    if (!phone) return res.status(400).json({ error: "Phone number required for STK push" });
+    try {
+      const token = await getMpesaToken();
+      const ts = mpesaTimestamp();
+      const pwd = mpesaPassword(ts);
+      const tel = formatPhone(phone);
+
+      const stkRes = await axios.post(
+        `${MPESA_BASE}/mpesa/stkpush/v1/processrequest`,
+        {
+          BusinessShortCode: MPESA_SHORTCODE,
+          Password: pwd,
+          Timestamp: ts,
+          TransactionType: 'CustomerPayBillOnline',
+          Amount: Math.ceil(amount),
+          PartyA: tel,
+          PartyB: MPESA_SHORTCODE,
+          PhoneNumber: tel,
+          CallBackURL: CALLBACK_URL,
+          AccountReference: (isBundle ? 'BNDL-' : 'LEAD-') + propertyId.slice(0, 8).toUpperCase(),
+          TransactionDesc: `NestList Lead Unlock`,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const d = stkRes.data;
+      if (d.ResponseCode !== '0') {
+        throw new Error(d.ResponseDescription || d.errorMessage || 'STK Push failed');
+      }
+
+      if (useRealSupabase) {
+        await supabaseClient.from('lead_unlocks').insert({
+          property_id: propertyId,
+          landlord_id: landlordId,
+          inquiry_id: inquiryId || null,
+          amount_paid: amount,
+          bundle_size: bundleSize || 1,
+          status: 'pending',
+          mpesa_checkout_request_id: d.CheckoutRequestID,
+          payment_method: 'stk_push'
+        });
+      } else {
+        const db = getMockDb();
+        db.lead_unlocks.push({
+          id,
+          property_id: propertyId,
+          landlord_id: landlordId,
+          inquiry_id: inquiryId || null,
+          amount_paid: amount,
+          bundle_size: bundleSize || 1,
+          status: 'pending',
+          mpesa_checkout_request_id: d.CheckoutRequestID,
+          payment_method: 'stk_push',
+          created_at: new Date().toISOString()
+        });
+        saveMockDb(db);
+      }
+
+      return res.json({ success: true, checkoutId: d.CheckoutRequestID, unlockId: id, message: "STK Push sent!" });
+    } catch (err: any) {
+      console.error('Lead Unlock STK error:', err.response?.data || err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    // Manual Payment
+    if (useRealSupabase) {
+      try {
+        const { data, error } = await supabaseClient.from('lead_unlocks').insert({
+          property_id: propertyId,
+          landlord_id: landlordId,
+          inquiry_id: inquiryId || null,
+          amount_paid: amount,
+          bundle_size: bundleSize || 1,
+          status: 'pending',
+          mpesa_code: mpesaCode || null,
+          payment_method: 'manual'
+        }).select().single();
+        if (error) throw error;
+        return res.json({ success: true, unlockId: data.id });
+      } catch (err: any) {
+        return res.status(500).json({ error: err.message });
+      }
+    } else {
+      const db = getMockDb();
+      db.lead_unlocks.push({
+        id,
+        property_id: propertyId,
+        landlord_id: landlordId,
+        inquiry_id: inquiryId || null,
+        amount_paid: amount,
+        bundle_size: bundleSize || 1,
+        status: 'pending',
+        mpesa_code: mpesaCode || null,
+        payment_method: 'manual',
+        created_at: new Date().toISOString()
+      });
+      saveMockDb(db);
+      return res.json({ success: true, unlockId: id });
+    }
+  }
+});
+
+// POST /api/leads/unlock/:id/confirm
+app.post('/api/leads/unlock/:id/confirm', async (req, res) => {
+  const { id } = req.params;
+
+  if (useRealSupabase) {
+    try {
+      const { data: unlock, error: uErr } = await supabaseClient
+        .from('lead_unlocks')
+        .select('*, property:properties(title, lead_credits)')
+        .eq('id', id)
+        .single();
+      if (uErr || !unlock) throw new Error("Unlock record not found");
+
+      await supabaseClient.from('lead_unlocks').update({
+        status: 'confirmed',
+        unlocked_at: new Date().toISOString()
+      }).eq('id', id);
+
+      if (unlock.bundle_size === 5) {
+        const currentCredits = unlock.property?.lead_credits || 0;
+        const newBalance = currentCredits + 5;
+        await supabaseClient.from('properties').update({ lead_credits: newBalance }).eq('id', unlock.property_id);
+
+        const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', unlock.landlord_id).single();
+        if (profile?.phone) {
+          await sendSMS(
+            profile.phone,
+            `NestList: ✅ 5 lead credits added to '${unlock.property?.title}'. Credits: ${newBalance}. nestlist.com`,
+            'bundle_purchased'
+          );
+        }
+      } else {
+        if (unlock.inquiry_id) {
+          await supabaseClient.from('inquiries').update({ is_locked: false }).eq('id', unlock.inquiry_id);
+        }
+
+        const { data: profile } = await supabaseClient.from('profiles').select('phone').eq('id', unlock.landlord_id).single();
+        if (profile?.phone) {
+          await sendSMS(
+            profile.phone,
+            `NestList: 🔓 Lead unlocked! View tenant contact at nestlist.com/dashboard`,
+            'lead_unlocked'
+          );
+        }
+      }
+
+      return res.json({ success: true, message: "Lead/bundle confirmed successfully" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const idx = db.lead_unlocks.findIndex(u => u.id === id);
+    if (idx === -1) return res.status(404).json({ error: "Unlock record not found" });
+
+    const unlock = db.lead_unlocks[idx];
+    unlock.status = 'confirmed';
+    unlock.unlocked_at = new Date().toISOString();
+
+    const prop = db.properties.find(p => p.id === unlock.property_id);
+    const landlord = db.profiles.find(p => p.id === unlock.landlord_id);
+
+    if (unlock.bundle_size === 5) {
+      const currentCredits = prop?.lead_credits || 0;
+      const newBalance = currentCredits + 5;
+      if (prop) prop.lead_credits = newBalance;
+
+      if (landlord?.phone) {
+        await sendSMS(
+          landlord.phone,
+          `NestList: ✅ 5 lead credits added to '${prop?.title || "Property"}'. Credits: ${newBalance}. nestlist.com`,
+          'bundle_purchased'
+        );
+      }
+    } else {
+      if (unlock.inquiry_id) {
+        const inq = db.inquiries.find(i => i.id === unlock.inquiry_id);
+        if (inq) inq.is_locked = false;
+      }
+
+      if (landlord?.phone) {
+        await sendSMS(
+          landlord.phone,
+          `NestList: 🔓 Lead unlocked! View tenant contact at nestlist.com/dashboard`,
+          'lead_unlocked'
+        );
+      }
+    }
+
+    saveMockDb(db);
+    return res.json({ success: true, message: "Lead/bundle confirmed successfully" });
+  }
+});
+
+// POST /api/leads/unlock/:id/reject
+app.post('/api/leads/unlock/:id/reject', async (req, res) => {
+  const { id } = req.params;
+  if (useRealSupabase) {
+    try {
+      await supabaseClient.from('lead_unlocks').update({ status: 'failed' }).eq('id', id);
+      return res.json({ success: true, message: "Unlock rejected" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const u = db.lead_unlocks.find(u => u.id === id);
+    if (u) u.status = 'failed';
+    saveMockDb(db);
+    return res.json({ success: true, message: "Unlock rejected" });
+  }
+});
+
+// GET /api/leads/unlock/status
+app.get('/api/leads/unlock/status', async (req, res) => {
+  const { unlockId } = req.query;
+  if (!unlockId) return res.status(400).json({ error: "Missing unlockId" });
+
+  if (useRealSupabase) {
+    try {
+      const { data: unlock, error: uErr } = await supabaseClient.from('lead_unlocks').select('*').eq('id', unlockId).single();
+      if (uErr) throw uErr;
+
+      let inquiry = null;
+      if (unlock.status === 'confirmed' && unlock.inquiry_id) {
+        const { data: inq } = await supabaseClient.from('inquiries').select('*').eq('id', unlock.inquiry_id).single();
+        inquiry = inq;
+      }
+
+      return res.json({ success: true, status: unlock.status, inquiry });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const unlock = db.lead_unlocks.find(u => u.id === unlockId);
+    if (!unlock) return res.status(404).json({ error: "Unlock not found" });
+
+    let inquiry = null;
+    if (unlock.status === 'confirmed' && unlock.inquiry_id) {
+      inquiry = db.inquiries.find(i => i.id === unlock.inquiry_id);
+    }
+
+    return res.json({ success: true, status: unlock.status, inquiry });
+  }
+});
+
+// GET /api/admin/boosts
+app.get('/api/admin/boosts', async (req, res) => {
+  if (useRealSupabase) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('listing_boosts')
+        .select('*, property:properties(title), landlord:profiles(full_name, phone)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return res.json({ success: true, boosts: data });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const mapped = db.listing_boosts.map(b => {
+      const property = db.properties.find(p => p.id === b.property_id);
+      const landlord = db.profiles.find(p => p.id === b.landlord_id);
+      return { ...b, property, landlord };
+    });
+    return res.json({ success: true, boosts: mapped.reverse() });
+  }
+});
+
+// GET /api/admin/lead-unlocks
+app.get('/api/admin/lead-unlocks', async (req, res) => {
+  if (useRealSupabase) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('lead_unlocks')
+        .select('*, property:properties(title, type), landlord:profiles(full_name, phone), inquiry:inquiries(*)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return res.json({ success: true, unlocks: data });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  } else {
+    const db = getMockDb();
+    const mapped = db.lead_unlocks.map(u => {
+      const property = db.properties.find(p => p.id === u.property_id);
+      const landlord = db.profiles.find(p => p.id === u.landlord_id);
+      const inquiry = db.inquiries.find(i => i.id === u.inquiry_id);
+      return { ...u, property, landlord, inquiry };
+    });
+    return res.json({ success: true, unlocks: mapped.reverse() });
+  }
+});
+
 // DELETE /api/saved/:tenantId/:propertyId
 app.delete('/api/saved/:tenantId/:propertyId', async (req, res) => {
   const { tenantId, propertyId } = req.params;
@@ -2072,6 +2954,56 @@ app.post('/api/admin/expire-listings', async (req, res) => {
 
   if (useRealSupabase) {
     try {
+      // Expire listing boosts
+      const { data: expiredBoosts } = await supabaseClient
+        .from('listing_boosts')
+        .select('*, property:properties(title), landlord:profiles(phone)')
+        .eq('status', 'active')
+        .lt('expires_at', nowStr);
+      
+      if (expiredBoosts && expiredBoosts.length > 0) {
+        for (const b of expiredBoosts) {
+          await supabaseClient.from('listing_boosts').update({ status: 'expired' }).eq('id', b.id);
+          await supabaseClient.from('properties').update({
+            is_boosted: false,
+            boost_tier: null,
+            boost_expires_at: null,
+            boost_badge: null
+          }).eq('id', b.property_id);
+
+          if (b.landlord?.phone) {
+            await sendSMS(
+              b.landlord.phone,
+              `NestList: Your listing boost has ended. Re-boost to get back to the top: nestlist.com`,
+              'boost_expired'
+            );
+          }
+        }
+      }
+
+      // Warm about expiring boosts (1 day before)
+      const oneDayFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const { data: warningBoosts } = await supabaseClient
+        .from('listing_boosts')
+        .select('*, property:properties(title), landlord:profiles(phone)')
+        .eq('status', 'active')
+        .eq('warning_sent', false)
+        .lte('expires_at', oneDayFromNow)
+        .gt('expires_at', nowStr);
+      
+      if (warningBoosts && warningBoosts.length > 0) {
+        for (const b of warningBoosts) {
+          if (b.landlord?.phone) {
+            await sendSMS(
+              b.landlord.phone,
+              `NestList: ⚠️ Your listing boost expires tomorrow. Renew at nestlist.com/dashboard to stay on top.`,
+              'boost_expiring_soon'
+            );
+          }
+          await supabaseClient.from('listing_boosts').update({ warning_sent: true }).eq('id', b.id);
+        }
+      }
+
       // 1. Process warnings (3 days until expiry)
       const { data: warnings } = await supabaseClient
         .from('properties')
@@ -2114,6 +3046,43 @@ app.post('/api/admin/expire-listings', async (req, res) => {
     }
   } else {
     const db = getMockDb();
+
+    // Expire listing boosts in mock
+    const expiredBoosts = db.listing_boosts.filter(b => b.status === 'active' && b.expires_at && new Date(b.expires_at) < now);
+    for (const b of expiredBoosts) {
+      b.status = 'expired';
+      const prop = db.properties.find(p => p.id === b.property_id);
+      if (prop) {
+        prop.is_boosted = false;
+        prop.boost_tier = null;
+        prop.boost_expires_at = null;
+        prop.boost_badge = null;
+      }
+      const landlord = db.profiles.find(p => p.id === b.landlord_id);
+      if (landlord?.phone) {
+        await sendSMS(
+          landlord.phone,
+          `NestList: Your listing boost has ended. Re-boost to get back to the top: nestlist.com`,
+          'boost_expired'
+        );
+      }
+    }
+
+    // Warm about expiring boosts in mock (1 day before)
+    const oneDayFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const warningBoosts = db.listing_boosts.filter(b => b.status === 'active' && !b.warning_sent && b.expires_at && new Date(b.expires_at) <= oneDayFromNow && new Date(b.expires_at) > now);
+    for (const b of warningBoosts) {
+      b.warning_sent = true;
+      const landlord = db.profiles.find(p => p.id === b.landlord_id);
+      if (landlord?.phone) {
+        await sendSMS(
+          landlord.phone,
+          `NestList: ⚠️ Your listing boost expires tomorrow. Renew at nestlist.com/dashboard to stay on top.`,
+          'boost_expiring_soon'
+        );
+      }
+    }
+
     const warnings = db.properties.filter(p =>
       p.is_active &&
       !p.expiry_sms_sent &&
