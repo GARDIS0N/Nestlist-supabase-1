@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { PhotoUpload } from "../components/PhotoUpload";
 import { MpesaSTKPush } from "../components/MpesaSTKPush";
+import { LEAD_PRICES } from "../lib/constants";
 import { 
   MapPin, CheckSquare, Sparkles, Building, ChevronRight, ChevronLeft, 
   Loader2, ShieldCheck, Check, Clock, Phone, AlertTriangle, X, Hash, MessageSquare 
@@ -51,9 +52,16 @@ export const ListProperty: React.FC = () => {
   // Wizard Step Control
   const [step, setStep] = useState(1);
 
-  // Listing Model State
-  const [listingModel, setListingModel] = useState<"flat_fee" | "pay_per_lead">("flat_fee");
+  // Payment / Listing Model State ('pay_once' | 'pay_per_lead')
+  const [paymentModel, setPaymentModel] = useState<"pay_once" | "pay_per_lead">(() => {
+    const modelParam = searchParams.get("model") || searchParams.get("payment_model") || searchParams.get("listing_model");
+    if (modelParam === "pay_per_lead") return "pay_per_lead";
+    return "pay_once";
+  });
   const [showModelSelection, setShowModelSelection] = useState(true);
+
+  // Database compatible listing_model key ('flat_fee' | 'pay_per_lead')
+  const listingModel = paymentModel === "pay_per_lead" ? "pay_per_lead" : "flat_fee";
 
   // Property Form State
   const [propertyId, setPropertyId] = useState<string | null>(null);
@@ -114,8 +122,16 @@ export const ListProperty: React.FC = () => {
     setStep(prev => prev - 1);
   };
 
-  const getListingFee = (typeKey: string) => {
+  const getFlatFee = (typeKey: string) => {
     return TYPES.find(t => t.value === typeKey)?.fee || 100;
+  };
+
+  const getPerLeadFee = (typeKey: string) => {
+    return LEAD_PRICES[typeKey] || 50;
+  };
+
+  const getListingFee = (typeKey: string) => {
+    return getFlatFee(typeKey);
   };
 
   const getTypeNameLabel = (typeKey: string) => {
@@ -161,7 +177,7 @@ export const ListProperty: React.FC = () => {
             amenities: selectedAmenities,
             images: uploadedImages,
             status: "available",
-            is_active: false,
+            is_active: paymentModel === "pay_per_lead" ? true : false,
             listing_model: listingModel
           })
           .select()
@@ -286,16 +302,16 @@ export const ListProperty: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            {/* Option 1: FLAT FEE */}
+            {/* Option 1: PAY ONCE / FLAT FEE */}
             <div
-              onClick={() => setListingModel("flat_fee")}
+              onClick={() => setPaymentModel("pay_once")}
               className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 relative ${
-                listingModel === "flat_fee"
+                paymentModel === "pay_once"
                   ? "border-[#1E6B4A] bg-[#F0FDF4] shadow-sm"
                   : "border-[#E2EAE6] bg-white hover:border-stone-300"
               }`}
             >
-              {listingModel === "flat_fee" && (
+              {paymentModel === "pay_once" && (
                 <div className="absolute top-4 right-4 bg-[#1E6B4A] text-white p-1 rounded-full">
                   <Check className="h-4 w-4 stroke-[3]" />
                 </div>
@@ -324,14 +340,14 @@ export const ListProperty: React.FC = () => {
 
             {/* Option 2: PAY PER LEAD */}
             <div
-              onClick={() => setListingModel("pay_per_lead")}
+              onClick={() => setPaymentModel("pay_per_lead")}
               className={`cursor-pointer rounded-2xl p-5 border-2 transition-all duration-200 relative ${
-                listingModel === "pay_per_lead"
+                paymentModel === "pay_per_lead"
                   ? "border-[#D97706] bg-[#FFFBEB] shadow-sm"
                   : "border-[#E2EAE6] bg-white hover:border-stone-300"
               }`}
             >
-              {listingModel === "pay_per_lead" && (
+              {paymentModel === "pay_per_lead" && (
                 <div className="absolute top-4 right-4 bg-[#D97706] text-white p-1 rounded-full">
                   <Check className="h-4 w-4 stroke-[3]" />
                 </div>
@@ -358,7 +374,7 @@ export const ListProperty: React.FC = () => {
               </div>
             </div>
 
-            {listingModel === "pay_per_lead" && (
+            {paymentModel === "pay_per_lead" && (
               <div className="bg-[#FFFBEB] border border-[#FDE68A] rounded-xl p-3.5 text-xs text-amber-950 font-medium text-center">
                 💡 Buy 5 leads upfront and save up to 20%
               </div>
@@ -373,7 +389,7 @@ export const ListProperty: React.FC = () => {
             }}
             className="w-full py-3.5 text-white font-extrabold text-sm rounded-xl transition hover:opacity-95 flex items-center justify-center gap-1.5"
           >
-            <span>Continue with {listingModel === "flat_fee" ? "Flat Fee" : "Pay Per Lead"}</span>
+            <span>Continue with {paymentModel === "pay_once" ? "Pay Once (30 Days)" : "Pay Per Lead"}</span>
             <span>→</span>
           </button>
         </div>
@@ -483,25 +499,42 @@ export const ListProperty: React.FC = () => {
                 >
                   {TYPES.map((t, idx) => (
                     <option key={idx} value={t.value}>
-                      {t.label}
+                      {getTypeNameLabel(t.value)} — {paymentModel === "pay_per_lead" ? `KSh ${getPerLeadFee(t.value)} / lead` : `KSh ${getFlatFee(t.value)}`}
                     </option>
                   ))}
                 </select>
               </div>
 
               {/* Live Fee Preview Banner (BELOW Property Type dropdown) */}
-              <div className="bg-[#FEF3C7] border border-[#FDE68A] border-l-4 border-l-[#D97706] rounded-[10px] p-[12px] px-[14px] flex justify-between items-center animate-fade-in select-none">
-                <div className="space-y-0.5">
-                  <p className="font-bold text-amber-900 flex items-center gap-1.5 text-[13px]">
-                    <span>📋</span> Listing Fee
-                  </p>
-                  <p className="text-[11px] text-amber-800">Your listing will be active for 30 days</p>
+              {paymentModel === "pay_once" ? (
+                <div className="bg-[#FEF3C7] border border-[#FDE68A] border-l-4 border-l-[#D97706] rounded-[10px] p-[12px] px-[14px] flex justify-between items-center animate-fade-in select-none">
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-amber-900 flex items-center gap-1.5 text-[13px]">
+                      <span>📋</span> Listing Fee: KSh {getFlatFee(selectedType)}
+                    </p>
+                    <p className="text-[11px] text-amber-800">Your listing will be active for 30 days — One-time payment</p>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <p className="text-2xl font-black text-[#D97706] font-mono">KSh {getFlatFee(selectedType)}</p>
+                    <p className="text-stone-500 text-[11px] font-medium">One-time payment</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-black text-[#D97706] font-mono">KSh {getListingFee(selectedType)}</p>
-                  <p className="text-stone-500 text-[11px] font-medium">One-time payment</p>
+              ) : (
+                <div className="bg-[#ECFDF5] border border-[#A7F3D0] border-l-4 border-l-[#059669] rounded-[10px] p-[12px] px-[14px] flex justify-between items-center animate-fade-in select-none">
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-emerald-950 flex items-center gap-1.5 text-[13px]">
+                      <span>🔓</span> Pay Per Lead
+                    </p>
+                    <p className="text-[11px] text-emerald-800">
+                      Free to list. You only pay KSh {getPerLeadFee(selectedType)} when you choose to unlock a tenant's contact details.
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 ml-3">
+                    <p className="text-2xl font-black text-[#059669] font-mono">KSh {getPerLeadFee(selectedType)}</p>
+                    <p className="text-emerald-700 text-[11px] font-bold">per lead</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Description */}
               <div className="space-y-1.5">
@@ -907,25 +940,45 @@ export const ListProperty: React.FC = () => {
               </div>
 
               {/* LISTING FEE SECTION */}
-              <div className="border border-[#FDE68A] rounded-xl p-4 bg-[#FEF3C7] space-y-1.5 relative select-none">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800">NestList Listing Fee</h3>
-                <div className="flex justify-between items-end">
-                  <div className="space-y-0.5">
-                    <p className="text-xs text-amber-800 font-semibold">Active Period: <strong>30 days</strong></p>
-                    <p className="text-xs text-amber-800 font-semibold">Payment Method: <strong>M-Pesa Paybill</strong></p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-mono font-black text-[#D97706]">KSh {getListingFee(selectedType)}</p>
-                    <p className="text-[10px] text-amber-700/80 font-bold uppercase">Listing Activation Fee</p>
+              {paymentModel === "pay_per_lead" ? (
+                <div className="border border-[#A7F3D0] rounded-xl p-4 bg-[#ECFDF5] space-y-1.5 relative select-none">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-900">Pay Per Lead Model</h3>
+                  <div className="flex justify-between items-end">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-emerald-800 font-semibold">Upfront Listing Fee: <strong>KES 0 (Free)</strong></p>
+                      <p className="text-xs text-emerald-800 font-semibold">Lead Unlock Price: <strong>KES {getPerLeadFee(selectedType)} / lead</strong></p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-mono font-black text-[#059669]">KES 0</p>
+                      <p className="text-[10px] text-emerald-700/80 font-bold uppercase">No Upfront Payment</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="border border-[#FDE68A] rounded-xl p-4 bg-[#FEF3C7] space-y-1.5 relative select-none">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800">NestList Listing Fee</h3>
+                  <div className="flex justify-between items-end">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-amber-800 font-semibold">Active Period: <strong>30 days</strong></p>
+                      <p className="text-xs text-amber-800 font-semibold">Payment Method: <strong>M-Pesa Paybill</strong></p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-mono font-black text-[#D97706]">KSh {getFlatFee(selectedType)}</p>
+                      <p className="text-[10px] text-amber-700/80 font-bold uppercase">Listing Activation Fee</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Confidence Message Banner */}
             <div className="bg-[#F0FDF4] rounded-[10px] p-[12px] text-[13px] text-[#065F46] font-medium leading-normal flex items-start gap-2 select-none">
               <span className="text-base shrink-0">✅</span>
-              <span>Your listing will go <strong>LIVE</strong> within minutes of payment verification by our team.</span>
+              <span>
+                {paymentModel === "pay_per_lead"
+                  ? "Your listing will go LIVE immediately after publishing."
+                  : "Your listing will go LIVE within minutes of payment verification by our team."}
+              </span>
             </div>
 
             {/* Step Navigation Buttons */}
@@ -951,7 +1004,7 @@ export const ListProperty: React.FC = () => {
                   <Loader2 className="h-5 w-5 animate-spin mr-1" />
                 ) : (
                   <>
-                    <span>Save & Proceed to Pay</span>
+                    <span>{paymentModel === "pay_per_lead" ? "Save & Publish Listing" : "Save & Proceed to Pay"}</span>
                     <ChevronRight className="h-4 w-4" />
                   </>
                 )}

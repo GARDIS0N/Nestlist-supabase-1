@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { supabase, INITIAL_PROPERTIES, getSupabaseConfig } from "../lib/supabase";
+import { supabase, isSupabaseEnvMissing, getSupabaseConfig } from "../lib/supabase";
 import { PropertySkeleton } from "../components/PropertySkeleton";
 import { Search, MapPin, Heart, ListFilter, SlidersHorizontal, Grid, X, Info, AlertTriangle, Database } from "lucide-react";
 
@@ -94,6 +94,13 @@ export const Browse: React.FC = () => {
       setDbError(null);
       setUsingFallback(false);
 
+      if (isSupabaseEnvMissing) {
+        setDbError("Configuration error: Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.");
+        setProperties([]);
+        setPageHasMore(false);
+        return;
+      }
+
       let query = supabase
         .from("properties")
         .select("*", { count: "exact" })
@@ -117,11 +124,36 @@ export const Browse: React.FC = () => {
       const from = pageNum * ITEMS_PER_PAGE;
       const to = from + ITEMS_PER_PAGE - 1;
 
-      const { data, count, error } = await query
-        .order("is_boosted", { ascending: false })
-        .order("boost_expires_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .range(from, to);
+      let queryResult;
+      try {
+        queryResult = await query
+          .order("is_boosted", { ascending: false })
+          .order("boost_expires_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .range(from, to);
+
+        if (queryResult.error) {
+          const errMsg = queryResult.error.message || "";
+          if (
+            errMsg.includes("column") ||
+            errMsg.includes("is_boosted") ||
+            errMsg.includes("boost_expires_at") ||
+            queryResult.error.code === "42703"
+          ) {
+            console.warn("Monetization sorting columns are missing in the Supabase properties table. Falling back to simple created_at sorting.");
+            queryResult = await query
+              .order("created_at", { ascending: false })
+              .range(from, to);
+          }
+        }
+      } catch (err) {
+        console.warn("Monetization query failed, trying fallback query:", err);
+        queryResult = await query
+          .order("created_at", { ascending: false })
+          .range(from, to);
+      }
+
+      const { data, count, error } = queryResult;
 
       if (error) throw error;
 
@@ -158,54 +190,16 @@ export const Browse: React.FC = () => {
         setPageHasMore(filteredData.length === ITEMS_PER_PAGE);
       }
     } catch (error: any) {
-      console.warn("Error fetching properties from Supabase (using mock fallback):", error);
-      
-      // Mark fallback state and describe error
-      setUsingFallback(true);
-      if (error.message && (error.message.includes("relation") || error.message.includes("does not exist") || error.code === "PGRST116")) {
+      console.error("Error fetching properties from Supabase:", error);
+      if (isSupabaseEnvMissing) {
+        setDbError("Configuration error: Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.");
+      } else if (error.message && (error.message.includes("relation") || error.message.includes("does not exist") || error.code === "PGRST116")) {
         setDbError("Database tables are not initialized on your Supabase backend yet. Please run the SQL migration script (available on the Login page/Supabase panel) in your Supabase SQL Editor to activate live listings!");
       } else {
         setDbError(error.message || "Failed to fetch from live database.");
       }
-
-      // Filter on local/mock INITIAL_PROPERTIES for visual persistence
-      let filteredData = [...INITIAL_PROPERTIES];
-
-      if (selectedCounty !== "All Counties") {
-        filteredData = filteredData.filter(p => p.county === selectedCounty);
-      }
-      if (selectedType !== "all") {
-        filteredData = filteredData.filter(p => p.type === selectedType);
-      }
-      if (minPrice) {
-        filteredData = filteredData.filter(p => p.price >= parseFloat(minPrice));
-      }
-      if (maxPrice) {
-        filteredData = filteredData.filter(p => p.price <= parseFloat(maxPrice));
-      }
-      if (search.trim()) {
-        const keyword = search.toLowerCase();
-        filteredData = filteredData.filter(
-          p => p.title.toLowerCase().includes(keyword) ||
-               p.location.toLowerCase().includes(keyword) ||
-               p.description?.toLowerCase().includes(keyword)
-        );
-      }
-      if (selectedAmenities.length > 0) {
-        filteredData = filteredData.filter(p =>
-          selectedAmenities.every(amenity => p.amenities?.includes(amenity))
-        );
-      }
-
-      const from = pageNum * ITEMS_PER_PAGE;
-      const sliced = filteredData.slice(from, from + ITEMS_PER_PAGE);
-
-      if (isAppend) {
-        setProperties(prev => sortProperties([...prev, ...sliced]));
-      } else {
-        setProperties(sortProperties(sliced));
-      }
-      setPageHasMore(from + sliced.length < filteredData.length);
+      setProperties([]);
+      setPageHasMore(false);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -470,28 +464,25 @@ export const Browse: React.FC = () => {
             Showing <span className="text-stone-900">{properties.length}</span> verified listings
           </p>
           
-          {usingFallback && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-gold-100 text-gold-800 border border-gold-200">
-              <AlertTriangle className="h-3.5 w-3.5 text-gold-600 animate-pulse" />
-              <span>Database Connection Notice</span>
+          {dbError && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-850 border border-red-200">
+              <AlertTriangle className="h-3.5 w-3.5 text-red-600 animate-pulse" />
+              <span>{isSupabaseEnvMissing ? "Configuration Error" : "Database Connection Error"}</span>
             </span>
           )}
         </div>
 
-        {usingFallback && (
-          <div className="p-5 rounded-2xl bg-gold-50 border border-gold-200/80 text-gold-950 text-xs sm:text-sm flex flex-col md:flex-row items-start gap-4 shadow-sm font-medium animate-fade-in">
-            <div className="p-2.5 bg-gold-100 rounded-xl text-gold-700 shrink-0">
+        {dbError && (
+          <div className="p-5 rounded-2xl bg-red-50 border border-red-200/80 text-red-950 text-xs sm:text-sm flex flex-col md:flex-row items-start gap-4 shadow-sm font-medium animate-fade-in">
+            <div className="p-2.5 bg-red-100 rounded-xl text-red-700 shrink-0">
               <Database className="h-5 w-5" />
             </div>
             <div className="space-y-2">
-              <h4 className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
-                Supabase Tables Missing / Uninitialized
+              <h4 className="font-bold text-red-900 text-sm flex items-center gap-1.5">
+                {isSupabaseEnvMissing ? "Configuration Error" : "Database Tables / Connection Issue"}
               </h4>
-              <p className="text-[#4B5E54] leading-relaxed text-xs">
-                Nestlist is pointed to your real live Supabase instance (<span className="font-mono bg-white px-1 py-0.5 rounded text-gold-800 break-all">{getSupabaseConfig().url}</span>). However, required tables (e.g. <code className="font-mono bg-stone-100 px-1 py-0.5 rounded text-red-700">properties</code>) were not found on this project.
-              </p>
-              <p className="text-[#4B5E54] leading-relaxed text-xs">
-                We have gracefully loaded our high-fidelity local listings so you can continue exploring the application features immediately! To activate live database entries, please go to the <strong className="text-stone-900">Sign In</strong> or <strong className="text-stone-900">Sign Up</strong> page, expand the <strong className="text-gold-900">Supabase Database Connection</strong> panel, copy the table creation script, and run it in your <strong className="text-stone-900">Supabase SQL Editor</strong>.
+              <p className="text-[#7F1D1D] leading-relaxed text-xs">
+                {dbError}
               </p>
             </div>
           </div>

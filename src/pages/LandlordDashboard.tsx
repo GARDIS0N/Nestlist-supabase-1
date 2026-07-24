@@ -114,11 +114,30 @@ export const LandlordDashboard: React.FC = () => {
       const listingsList = propsData || [];
       setProperties(listingsList);
 
-      // 2. Fetch inquiries via secure API
-      const inqRes = await fetch(`/api/inquiries/landlord/${profile.id}`);
-      const inqData = await inqRes.json();
-      if (!inqRes.ok) throw new Error(inqData.error || "Failed to load inquiries");
-      const inqList = inqData.inquiries || [];
+      // 2. Fetch inquiries live from Supabase table for current landlord
+      let inqList: any[] = [];
+      const { data: directInq, error: inqErr } = await supabase
+        .from("inquiries")
+        .select("*, property:properties(id, title)")
+        .eq("landlord_id", profile.id)
+        .order("created_at", { ascending: false });
+
+      if (!inqErr && directInq) {
+        inqList = directInq;
+      } else {
+        // Fallback query if relation join fails
+        const { data: simpleInq } = await supabase
+          .from("inquiries")
+          .select("*")
+          .eq("landlord_id", profile.id)
+          .order("created_at", { ascending: false });
+
+        inqList = (simpleInq || []).map((i: any) => ({
+          ...i,
+          property: listingsList.find(p => p.id === i.property_id) || null
+        }));
+      }
+
       setInquiries(inqList);
 
       // 3. Fetch fees paid
@@ -610,14 +629,33 @@ export const LandlordDashboard: React.FC = () => {
     return diffDays > 0 ? diffDays : 0;
   };
 
-  // Performance calculations (Change 11)
-  const totalViews = properties.reduce((sum, p) => sum + (p.view_count || 0), 0);
+  // Performance calculations
+  const totalViews = properties.reduce((sum, p) => sum + (Number(p.view_count) || 0), 0);
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
   const newInquiriesThisWeek = inquiries.filter(i => new Date(i.created_at) >= oneWeekAgo).length;
+
+  // Calculate live inquiry count per property
+  const propertyInquiryCounts: Record<string, number> = {};
+  inquiries.forEach(i => {
+    if (i.property_id) {
+      propertyInquiryCounts[i.property_id] = (propertyInquiryCounts[i.property_id] || 0) + 1;
+    }
+  });
+
+  // Best Performing = property with highest inquiry count from live inquiries
   const bestPerformingProperty = properties.length > 0 
-    ? [...properties].sort((a, b) => (b.view_count || 0) - (a.view_count || 0))[0]
+    ? [...properties].sort((a, b) => {
+        const countA = propertyInquiryCounts[a.id] || 0;
+        const countB = propertyInquiryCounts[b.id] || 0;
+        if (countB !== countA) return countB - countA;
+        return (Number(b.view_count) || 0) - (Number(a.view_count) || 0);
+      })[0]
     : null;
+
+  const bestPerformingInquiryCount = bestPerformingProperty
+    ? (propertyInquiryCounts[bestPerformingProperty.id] || 0)
+    : 0;
 
   // General warning banner count for expired/expiring
   const expiringCount = properties.filter(p => {
@@ -827,7 +865,7 @@ export const LandlordDashboard: React.FC = () => {
                 {bestPerformingProperty ? bestPerformingProperty.title : "None yet"}
               </p>
               {bestPerformingProperty && (
-                <p className="text-[10px] text-stone-500 font-semibold">{bestPerformingProperty.view_count || 0} views</p>
+                <p className="text-[10px] text-stone-500 font-semibold">{bestPerformingInquiryCount} inquiries · {bestPerformingProperty.view_count || 0} views</p>
               )}
             </div>
             <span className="text-2xl">🏆</span>

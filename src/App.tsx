@@ -176,6 +176,8 @@ export default function App() {
                 Connecting Landlords and Tenants across Nairobi, Kiambu, Nakuru, Kisumu, and Mombasa.
               </p>
               <div className="flex justify-center space-x-4 text-white/60 text-[11px] font-medium pt-1">
+                <Link to="/pricing" className="text-[#34D399] hover:text-white hover:underline transition">Pricing Guide</Link>
+                <span>·</span>
                 <Link to="/privacy" className="text-[#34D399] hover:text-white hover:underline transition">Privacy Policy</Link>
                 <span>·</span>
                 <Link to="/terms" className="text-[#34D399] hover:text-white hover:underline transition">Terms of Service</Link>
